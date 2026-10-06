@@ -1,18 +1,23 @@
 YOUR NAME
-your.email@example.com | linkedin.com/in/yourprofile | github.com/yourusername
+your.email@example.com | London, United Kingdom
 
 # Optional. Omit SUMMARY entirely if you do not want generated resumes
 # to include or rewrite a professional summary.
 SUMMARY
-Brief professional summary tailored to the roles you are targeting.
+Recent BSc Chemistry graduate with First-Class Honours, seeking graduate energy,
+materials, sustainability and R&D roles. Replace with your own truthful summary.
 
-EXPERIENCE
-Company Name — Job Title                    Start – End
-- Achievement with measurable impact
-- Technology stack and responsibilities
+PROJECT & RESEARCH EXPERIENCE
+University Name — Research Project Title                    Start – End
+- Describe your actual research question, methods and contribution
+- Include only techniques, analysis and results you personally worked on
+
+INTERNSHIP EXPERIENCE
+Organisation — Placement / Internship Title                  Start – End
+- Replace with genuine internship work, or remove this section if not applicable
 
 SKILLS
-Languages, frameworks, tools, cloud platforms
+Include only your demonstrated laboratory, research, technical and analytical skills
 
 EDUCATION
-Degree, Institution, Year
+BSc Chemistry, First-Class Honours, Institution, Year

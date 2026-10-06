@@ -16,13 +16,13 @@ from reportlab.platypus import BaseDocTemplate, Flowable, Frame, PageTemplate, P
 from ai.ats_optimizer import (
     align_summary_years,
     boost_resume_skills,
-    jd_min_years,
     prepare_skills,
     scrub_jd_prose,
     shorten_text,
 )
 from ai.job_scorer import fetch_job_description, jd_for_resume
 from ai.llm import extract_json, generate
+from ai.resume_sections import HEADING as _HEADING, parse_experience_entries, split_resume_sections
 from config import (
     EXPERIENCE_YEARS,
     MASTER_RESUME_PATH,
@@ -34,7 +34,8 @@ ATS_META_VERSION = 2
 
 RESUME_SYSTEM = (
     "You tailor a resume for one job. Rewrite the summary and existing bullets only. "
-    "NEVER invent employers, titles, dates, education, or metrics. "
+    "NEVER invent employers, titles, dates, education, skills, years of experience, or metrics. "
+    "Keep academic research/projects/internships identified as academic; do not turn them into industry employment. "
     "Do NOT copy job titles, section headings, or JD fragments. "
     "Do NOT list skills as 'specializing in X principles'. "
     "Do NOT bolt new tools onto unrelated bullets. "
@@ -46,7 +47,8 @@ RESUME_SYSTEM = (
 RESUME_SYSTEM_NO_SUMMARY = (
     "You tailor a resume for one job. Rewrite existing bullets only. "
     "Do not write, invent, or return a summary. "
-    "NEVER invent employers, titles, dates, education, or metrics. "
+    "NEVER invent employers, titles, dates, education, skills, years of experience, or metrics. "
+    "Keep academic research/projects/internships identified as academic; do not turn them into industry employment. "
     "Do NOT copy job titles, section headings, or JD fragments. "
     "Do NOT list skills as 'specializing in X principles'. "
     "Do NOT bolt new tools onto unrelated bullets. "
@@ -66,8 +68,9 @@ EXPERIENCE BULLETS (rewrite in place; keep the same ids):
 
 Rewrite the summary (2 short sentences from true facts) and each bullet so they stay truthful.
 Mirror the job's language only when the original bullet already describes that kind of work.
-If the job requires {min_years}+ years, the summary must say {min_years}+ years (never a lower number).
-Do not add, drop, or reorder ids. Do not invent metrics, employers, or security architecture.
+The candidate has {candidate_years} years of full-time professional industry experience.
+Never increase that number to meet a job requirement or present academic research as industry employment.
+Do not add, drop, or reorder ids. Do not invent metrics, employers, or technical skills.
 
 Return ONLY:
 {{"summary":"<2 sentences>","bullets":{{"e0b0":"<rewritten>"}}}}
@@ -87,7 +90,7 @@ EXPERIENCE BULLETS (rewrite in place; keep the same ids):
 
 Rewrite each bullet so it stays truthful. Do not write a summary.
 Mirror the job's language only when the original bullet already describes that kind of work.
-Do not add, drop, or reorder ids. Do not invent metrics, employers, or security architecture.
+Do not add, drop, or reorder ids. Do not invent metrics, employers, or technical skills.
 
 Return ONLY:
 {{"bullets":{{"e0b0":"<rewritten>"}}}}
@@ -101,10 +104,6 @@ JOB:
 
 MASTER_RESUME_PDF = MASTER_RESUME_PATH.with_suffix(".pdf")
 
-_HEADING = re.compile(
-    r"^(SUMMARY|SKILLS|EXPERIENCE|PERSONAL PROJECTS?|PROJECTS?|EDUCATION|CERTIFICATIONS)\s*$",
-    re.I,
-)
 _BULLET = re.compile(r"^[\u2022•\-\*]\s+")
 _DATE_TAIL = re.compile(
     r"^(.*?)\s+((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}"
@@ -178,18 +177,7 @@ def _bullet_text(line: str) -> str:
 
 
 def _split_sections(text: str) -> dict[str, list[str]]:
-    sections: dict[str, list[str]] = {"_header": []}
-    current = "_header"
-    for raw in text.splitlines():
-        line = raw.rstrip()
-        if _is_heading(line):
-            current = _HEADING.match(line.strip()).group(1).upper()
-            if current.startswith("PERSONAL PROJECT") or current.startswith("PROJECT"):
-                current = "PROJECTS"
-            sections.setdefault(current, [])
-            continue
-        sections.setdefault(current, []).append(line)
-    return sections
+    return split_resume_sections(text)
 
 
 def _parse_skill_groups(lines: list[str]) -> list[dict]:
@@ -210,26 +198,7 @@ def _parse_skill_groups(lines: list[str]) -> list[dict]:
 
 
 def _parse_jobs(lines: list[str]) -> list[dict]:
-    jobs: list[dict] = []
-    current: dict | None = None
-
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if _is_bullet(stripped):
-            if current is None:
-                current = {"header": "", "subheader": "", "bullets": []}
-                jobs.append(current)
-            current["bullets"].append(_bullet_text(stripped))
-            continue
-        if current is not None and not current["bullets"] and not current["subheader"]:
-            current["subheader"] = stripped
-            continue
-        current = {"header": stripped, "subheader": "", "bullets": []}
-        jobs.append(current)
-
-    return [job for job in jobs if job.get("header") or job.get("bullets")]
+    return parse_experience_entries(lines)
 
 
 def _pdf_uris(path: Path) -> list[str]:
@@ -378,6 +347,8 @@ def parse_master_resume(text: str | None = None) -> dict:
         "skill_groups": skill_groups,
         "experience": experience,
         "projects": projects,
+        "leadership": _parse_jobs(sections.get("LEADERSHIP", [])),
+        "languages": [line.strip() for line in sections.get("LANGUAGES", []) if line.strip()],
         "education": education,
         "certifications": certifications,
         "links": load_resume_links(text=raw),
@@ -1065,7 +1036,6 @@ def build_resume(
     job_description = jd_for_resume(raw_description)
     job_title = job.get("title", "Unknown")
     company_name = job.get("company", "Unknown")
-    min_years = jd_min_years(job_description, job_title) or EXPERIENCE_YEARS
     prepared = prepare_skills(
         template["skill_groups"],
         job_description,
@@ -1086,7 +1056,7 @@ def build_resume(
     if has_summary:
         prompt = RESUME_PROMPT.format(
             summary=template["summary"],
-            min_years=min_years,
+            candidate_years=EXPERIENCE_YEARS,
             **prompt_values,
         )
         system = RESUME_SYSTEM

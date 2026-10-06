@@ -8,10 +8,11 @@ from jobs.ats.lever import fetch_lever_jobs
 from jobs.ats.smartrecruiters import fetch_smartrecruiters_jobs
 from jobs.ats.workday import fetch_workday_jobs
 from jobs.career_discovery import discover_ats
-from jobs.career_registry import ALL_COMPANIES, get_career_config
+from jobs.career_registry import get_career_config
 from jobs.company_utils import role_matches
 from jobs.database import get_cached_ats, set_cached_ats
-from jobs.profile_filter import profile_matches
+from jobs.profile_filter import pre_description_matches, profile_matches
+from jobs.ats.details import enrich_ats_descriptions
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,10 @@ def fetch_career_jobs_for_company(company: str) -> list[dict]:
         roles = USER_PROFILE.get("target_roles", [])
         jobs = [j for j in jobs if role_matches(j.get("title", ""), roles)]
 
+    # Discard clear barriers before spending detail requests. Ambiguous UK
+    # remote listings get a chance to supply eligibility evidence in the detail.
+    jobs = [j for j in jobs if pre_description_matches(j)]
+    enrich_ats_descriptions(jobs)
     jobs = [j for j in jobs if profile_matches(j)]
 
     logger.info("Career site: %d jobs from %s (%s/%s)", len(jobs), company, ats, slug)
@@ -69,7 +74,9 @@ def fetch_career_jobs_for_company(company: str) -> list[dict]:
 
 
 def fetch_all_career_jobs() -> list[dict]:
-    companies = USER_PROFILE.get("target_companies") or ALL_COMPANIES
+    # An empty shortlist means role-based LinkedIn search, not every legacy
+    # software employer in the registry.
+    companies = USER_PROFILE.get("target_companies") or []
     all_jobs: list[dict] = []
     seen_ids: set[str] = set()
     seen_dedup: set[str] = set()

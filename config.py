@@ -57,7 +57,7 @@ def _load_target_companies() -> list[str]:
         data = json.loads(example_path.read_text(encoding="utf-8"))
         return [str(company).strip() for company in data.get("target_companies", []) if str(company).strip()]
 
-    return ["Google", "Microsoft", "Amazon"]
+    return ["Octopus Energy", "EDF", "National Grid", "Johnson Matthey", "Arup"]
 
 
 def _resolve_path(path_value: str) -> Path:
@@ -67,20 +67,53 @@ def _resolve_path(path_value: str) -> Path:
     return path
 
 
-EXPERIENCE_YEARS = int(os.getenv("EXPERIENCE_YEARS", "4"))
+DEFAULT_TARGET_ROLES = (
+    "Energy Analyst,Graduate Energy Analyst,Energy Consultant,Graduate Energy Consultant,"
+    "Sustainability Analyst,Renewable Energy Analyst,Technical Analyst,Graduate Analyst,"
+    "Materials Scientist,Materials Engineer,Graduate Materials Scientist,Battery Scientist,"
+    "Battery Engineer,Electrochemistry Scientist,Electrochemist,Research Scientist,"
+    "R&D Scientist,Graduate Scientist,Research Engineer,Clean Energy,Energy Technology,"
+    "Graduate Chemist,Graduate STEM,Environmental Consultant,Graduate Researcher"
+)
+
+EXPERIENCE_YEARS = int(os.getenv("EXPERIENCE_YEARS", "0"))
 FILTER_BY_EXPERIENCE = _parse_bool(os.getenv("FILTER_BY_EXPERIENCE", "true"))
-EXPERIENCE_MIN = int(os.getenv("EXPERIENCE_MIN", str(max(2, EXPERIENCE_YEARS - 2))))
+EXPERIENCE_MIN = int(os.getenv("EXPERIENCE_MIN", "0"))
 EXPERIENCE_MAX = int(os.getenv("EXPERIENCE_MAX", str(EXPERIENCE_YEARS)))
-MAX_EDUCATION = os.getenv("MAX_EDUCATION", "masters").strip().lower() or "masters"
+MAX_EDUCATION = os.getenv("MAX_EDUCATION", "bachelors").strip().lower() or "bachelors"
 FILTER_BY_EDUCATION = _parse_bool(os.getenv("FILTER_BY_EDUCATION", "true"))
+REJECT_12_MONTH_CONTRACT = _parse_bool(os.getenv("REJECT_12_MONTH_CONTRACT", "true"))
+FILTER_BY_LOCATION = _parse_bool(os.getenv("FILTER_BY_LOCATION", "true"))
+WORKDAY_SEARCH_TEXT = os.getenv("WORKDAY_SEARCH_TEXT", "graduate").strip()
+DEFAULT_WORKDAY_SEARCH_TERMS = "graduate,energy,sustainability,materials,scientist,analyst,engineer"
+# Preserve explicit legacy overrides; the old default no longer prevents rotation.
+WORKDAY_SEARCH_TERMS = _parse_csv(os.getenv(
+    "WORKDAY_SEARCH_TERMS",
+    WORKDAY_SEARCH_TEXT if WORKDAY_SEARCH_TEXT != "graduate" else DEFAULT_WORKDAY_SEARCH_TERMS,
+)) or [""]
+ENABLE_BROAD_LINKEDIN_SEARCH = _parse_bool(os.getenv("ENABLE_BROAD_LINKEDIN_SEARCH", "true"))
+DEFAULT_BROAD_SEARCH_QUERIES = (
+    "graduate energy,energy analyst,renewable energy graduate,sustainability graduate,"
+    "materials graduate,materials scientist,battery scientist,electrochemistry,"
+    "graduate scientist,research scientist,clean energy graduate,net zero graduate,"
+    "graduate engineer,technical analyst"
+)
+BROAD_SEARCH_QUERIES = list(dict.fromkeys(_parse_csv(os.getenv(
+    "BROAD_SEARCH_QUERIES", DEFAULT_BROAD_SEARCH_QUERIES,
+))))
+BROAD_SEARCH_QUERIES_PER_CYCLE = max(0, _parse_int(os.getenv("BROAD_SEARCH_QUERIES_PER_CYCLE", "4"), 4))
+FILTER_BY_DOMAIN = _parse_bool(os.getenv("FILTER_BY_DOMAIN", "true"))
+ATS_DETAIL_REQUESTS_PER_BOARD = max(0, _parse_int(os.getenv("ATS_DETAIL_REQUESTS_PER_BOARD", "10"), 10))
 
 USER_PROFILE = {
     "name": os.getenv("USER_NAME", "").strip(),
     "target_roles": _parse_csv(
-        os.getenv("TARGET_ROLES", "Software Engineer,Senior Software Engineer")
+        os.getenv("TARGET_ROLES", DEFAULT_TARGET_ROLES)
     ),
     "target_companies": _load_target_companies(),
-    "location": os.getenv("JOB_LOCATION", "India").strip(),
+    "location": os.getenv("JOB_LOCATION", "London, United Kingdom").strip(),
+    "education": "Recent BSc Chemistry graduate; First-Class Honours",
+    "background": "University research projects/internships; no full-time professional industry experience",
     "experience_years": EXPERIENCE_YEARS,
     "min_match_score": int(os.getenv("MIN_MATCH_SCORE", "65")),
     "skills": _parse_csv(os.getenv("USER_SKILLS", "")),
@@ -117,7 +150,7 @@ LINKEDIN_MAX_SEARCHES_PER_CYCLE = max(
 SCORE_BATCH_SIZE = max(1, _parse_int(os.getenv("SCORE_BATCH_SIZE", "80"), 80))
 EMAIL_MIN_SCORE = max(0, _parse_int(os.getenv("EMAIL_MIN_SCORE", "70"), 70))
 EMAIL_MAX_POSTED_DAYS = max(
-    0, _parse_int(os.getenv("EMAIL_MAX_POSTED_DAYS", "1"), 1)
+    0, _parse_int(os.getenv("EMAIL_MAX_POSTED_DAYS", "2"), 2)
 )
 EMAIL_ATTACH_MATERIALS = _parse_bool(
     os.getenv("EMAIL_ATTACH_MATERIALS", "false"), default=False

@@ -9,7 +9,6 @@ from jobs.database import get_connection, init_db
 from jobs.linkedin_utils import normalize_linkedin_job_url
 from jobs.profile_filter import profile_matches
 from jobs.ats.base import listing_fingerprint
-from config import FILTER_BY_EDUCATION, FILTER_BY_EXPERIENCE
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +149,8 @@ def _row_to_dict(row) -> dict:
     resume_path = str(_row_value(row, "resume_path", "") or "")
     cover_letter_path = str(_row_value(row, "cover_letter_path", "") or "")
     email_sent = bool(_row_value(row, "email_sent", 0))
+    from jobs.domain_filter import description_available
+    has_description = description_available({"description": _row_value(row, "description", "")})
 
     return {
         "job_id": row["job_id"],
@@ -162,6 +163,7 @@ def _row_to_dict(row) -> dict:
         "source_company": row["source_company"],
         "dedup_hash": row["dedup_hash"] if "dedup_hash" in row.keys() else "",
         "description": row["description"] if "description" in row.keys() else "",
+        "description_status": "available" if has_description else "unavailable",
         "first_seen_at": row["first_seen_at"],
         "fetched_at": row["fetched_at"],
         "is_new": bool(row["is_new"]),
@@ -229,6 +231,15 @@ def get_existing_fingerprints() -> set[str]:
     return fingerprints
 
 
+def get_existing_job_descriptions() -> dict[str, str]:
+    """Reuse fetched descriptions without spending source request budgets again."""
+    init_db()
+    with get_connection() as conn:
+        return {row['job_id']: row['description'] for row in conn.execute(
+            "SELECT job_id, description FROM jobs WHERE description IS NOT NULL AND description != ''"
+        ) if row['description'] != 'Job description unavailable.'}
+
+
 def get_all_jobs(
     company: str | None = None,
     search: str | None = None,
@@ -267,10 +278,7 @@ def get_all_jobs(
         rows = conn.execute(query, params).fetchall()
 
     jobs = [_row_to_dict(row) for row in rows]
-    if FILTER_BY_EXPERIENCE or FILTER_BY_EDUCATION:
-        jobs = [
-            job for job in jobs if job.get("is_applied") or profile_matches(job)
-        ]
+    jobs = [job for job in jobs if job.get("is_applied") or profile_matches(job)]
     for job in jobs:
         job.pop("description", None)
         job.pop("resume_path", None)
@@ -519,20 +527,17 @@ def backfill_linkedin_descriptions() -> dict:
 
 
 def purge_mismatched_jobs() -> int:
-    """Delete stored jobs that fail the experience or education profile."""
-    if not FILTER_BY_EXPERIENCE and not FILTER_BY_EDUCATION:
-        return 0
-
+    """Delete open stored jobs that fail any enabled candidate filter."""
     init_db()
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT job_id, title, description FROM jobs WHERE COALESCE(is_applied, 0) = 0"
+            "SELECT job_id, title, description, location FROM jobs WHERE COALESCE(is_applied, 0) = 0"
         ).fetchall()
         to_delete = [
             row["job_id"]
             for row in rows
             if not profile_matches(
-                {"title": row["title"], "description": row["description"] or ""}
+                {"title": row["title"], "description": row["description"] or "", "location": row["location"]}
             )
         ]
         if not to_delete:
@@ -822,6 +827,7 @@ def get_unnotified_high_score_jobs(
             (int(min_score),),
         ).fetchall()
     jobs = [_row_to_dict(row) for row in rows]
+    jobs = [job for job in jobs if profile_matches(job)]
     for job in jobs:
         job.pop("description", None)
         job.pop("resume_path", None)

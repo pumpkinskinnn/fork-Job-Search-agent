@@ -1,6 +1,31 @@
-# Job Agent
+# UK Graduate Energy & Materials Job Agent
 
-A local job-alert system that monitors **LinkedIn** and company **career sites** (Greenhouse, Lever, Ashby, SmartRecruiters) for new openings at companies you care about. Jobs are stored in SQLite, shown in a React dashboard, and emailed to you when a new listing scores **70** or higher and was posted today or yesterday.
+A local job-search agent for a **recent BSc Chemistry graduate with First-Class Honours**, based in **London, United Kingdom**, with academic research/projects/internships and **no full-time professional industry experience**. It searches LinkedIn and supported company career sites for graduate energy, renewables, sustainability, battery/electrochemistry, materials and R&D roles. Jobs are stored in SQLite, scored against your CV, shown in a React dashboard and optionally emailed when they score **70+** and were posted today or within the previous two calendar days.
+
+The workflow is **search → filter → score → display/email**. It does not submit applications. LinkedIn's existing request budgets and 15-minute default polling interval are unchanged.
+
+### Graduate filtering and scoring
+
+- Keep graduate/new-graduate, junior, entry-level, trainee and internship roles; scoring favours permanent graduate jobs over internships.
+- Reject senior/lead/principal/staff/manager/director/head/VP/chief titles. Ordinary Research Engineer titles are accepted.
+- Reject explicit mandatory industry/professional/commercial/consultancy experience, including positive minimum years. Keep preferences, zero-minimum ranges and academic/research/internship alternatives. Ambiguous experience is retained for scoring.
+- With `MAX_EDUCATION=bachelors`, reject mandatory Master's/PhD qualifications; keep postgraduate preferences and explicit BSc alternatives.
+- With `REJECT_12_MONTH_CONTRACT=true`, reject explicit 12-month/one-year contracts, fixed-term contracts, FTCs and temporary terms. Unrelated training durations are accepted.
+- With `FILTER_BY_LOCATION=true`, keep UK locations and explicitly UK-eligible remote roles. London/hybrid is prioritised by scoring; other UK roles score lower for practical fit. Known overseas locations and unspecified remote eligibility are rejected. Missing location/description is uncertain, not proof of eligibility.
+- Score with weights: graduate suitability 25%, energy/sustainability 25%, academic/technical fit 25%, transferable/analytical skills 15%, location/practical fit 10%. Clear hard-filter mismatches are capped at 10/100; missing descriptions are capped at 60/100, below the default email threshold.
+- CV research/project/internship headings are recognised without renaming. Tailoring preserves evidenced skills and never increases years of experience to satisfy a job description. ATS targets are diagnostics, not guarantees.
+
+Filters operate on available listing text and cannot infer missing requirements. Workday and SmartRecruiters list responses may omit descriptions; such listings need a full JD before reliable scoring and are not allowed to reach the default email threshold without one. Career-page discovery only supports known ATS platforms; some employers will be found through LinkedIn instead.
+
+### Automated checks
+
+```bash
+source .venv/bin/activate
+python -m unittest discover -s tests -v
+cd ui && npm run build
+```
+
+Tests use temporary databases, mocked network/AI calls and sample CVs. They cover graduate filters, independent preferences vs requirements, UK locations, stored-job/email selection, AI score caps, research CV parsing/PDF output, and LinkedIn rate limits. They never send emails or apply for jobs.
 
 ---
 
@@ -27,10 +52,10 @@ A local job-alert system that monitors **LinkedIn** and company **career sites**
 
 - Fetches jobs from **career-site APIs** and **LinkedIn** guest search
 - **React dashboard** with card and table views, search, filters, and sort
-- **Email alerts** when new jobs score **70+** and were posted today or yesterday (Gmail, Resend, SMTP, or Maileroo)
+- **Email alerts** when new jobs score **70+** and were posted within two calendar days (Gmail, SMTP, or Maileroo)
 - **Background polling** — the API server fetches on a schedule while the UI stays open
 - **New-job celebration** — confetti animation when new listings appear (great for a desk display)
-- **Experience filtering** — filters jobs by years of experience in the title/description
+- **Graduate profile filtering** — checks mandatory professional experience, education, contract duration and UK location
 - **Deduplication** — same role from LinkedIn and a career site is stored once
 - **Optional AI mode** — Gemini scores jobs and tailors one-page resumes and cover letters from the dashboard or `--with-ai` (OpenAI if Gemini fails, then Claude)
 
@@ -90,9 +115,13 @@ Open `.env` and set at minimum:
 
 ```env
 USER_NAME=Your Name
-TARGET_ROLES=Senior Software Engineer,Software Engineer
-JOB_LOCATION=India
-NOTIFY_EMAIL=your.email@gmail.com
+TARGET_ROLES=Graduate Energy Analyst,Graduate Materials Scientist,Energy Consultant,Research Engineer
+JOB_LOCATION=London, United Kingdom
+EXPERIENCE_YEARS=0
+EXPERIENCE_MIN=0
+EXPERIENCE_MAX=0
+MAX_EDUCATION=bachelors
+REJECT_12_MONTH_CONTRACT=true
 ```
 
 See [Configuration reference](#configuration-reference) for every variable.
@@ -104,11 +133,11 @@ Add the companies you want to watch:
 ```json
 {
   "target_companies": [
-    "Google",
-    "Microsoft",
-    "Amazon",
-    "Meta",
-    "Apple"
+    "Octopus Energy",
+    "EDF",
+    "National Grid",
+    "Johnson Matthey",
+    "Arup"
   ]
 }
 ```
@@ -118,16 +147,20 @@ You can list as many companies as you like. Career-site URLs and ATS board mappi
 **Alternative:** set companies directly in `.env` instead of a JSON file:
 
 ```env
-TARGET_COMPANIES=Google,Microsoft,Amazon
+TARGET_COMPANIES=Octopus Energy,EDF,National Grid,Johnson Matthey,Arup
 ```
 
 ### 3. Edit `resume/master_resume.txt` (optional)
 
-Only needed if you use `--with-ai`. Replace the placeholder with your real resume text.
+Required for AI scoring or tailored files, including dashboard scoring. Replace the placeholder with your real CV text. `PROJECT & RESEARCH EXPERIENCE`, `RESEARCH EXPERIENCE`, `PROJECT EXPERIENCE` and `INTERNSHIP EXPERIENCE` are recognised. Describe university work as academic experience and list only techniques you actually used.
+
+Keep API keys/passwords only in the ignored `.env`; never put secrets in `env.template`, committed files or chat. Edit an existing `.env` rather than overwriting it. Old local values override the new defaults, so replace any software roles, India location, four-year experience or Master's ceiling. Leave `NOTIFY_EMAIL` blank until you want email delivery: starting the API sends a test email when email is fully configured.
+
+For a restricted cloud environment, allow the configured job-source domains. The default shortlist uses `www.linkedin.com`, `api.lever.co` (Octopus Energy), `careers.edfenergy.com`, `jobs.nationalgrid.com`, `matthey.com` and `www.arup.com`; discovery redirects/ATS boards may require additional exact hosts. No live source availability is guaranteed by the tests. Review the company shortlist and add employers relevant to your interests.
 
 ### 4. Set up email (optional but recommended)
 
-Add one of the email options to `.env` so you get alerts for new jobs that score **70+** and were posted today or yesterday. The easiest path is Gmail — see [Email setup](#email-setup). Leave `EMAIL_ATTACH_MATERIALS=false` until after the first fetch if you do not want tailored resume and cover letter PDFs generated for every matching job.
+Add one of the email options to `.env` for new-job alerts scoring **70+** within the last two calendar days. The easiest path is Gmail — see [Email setup](#email-setup). Keep `EMAIL_ATTACH_MATERIALS=false` to leave file generation click-only.
 
 ---
 
@@ -247,30 +280,33 @@ All settings are loaded from `.env` and `config/companies.json` by `config.py`. 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `USER_NAME` | *(empty)* | Your name (shown in CLI and API meta) |
-| `TARGET_ROLES` | `Software Engineer,...` | Comma-separated job titles to match |
-| `JOB_LOCATION` | `India` | Location passed to LinkedIn and career-site filters |
-| `FILTER_BY_ROLE` | `true` | When `true`, only jobs matching `TARGET_ROLES` are kept |
+| `TARGET_ROLES` | Energy/graduate/scientific role variants | Comma-separated titles with flexible matching for related graduate STEM roles |
+| `JOB_LOCATION` | `London, United Kingdom` | Location passed to LinkedIn searches |
+| `FILTER_BY_ROLE` | `true` | Keep matching roles and related scientific/graduate variants for scoring |
+| `FILTER_BY_DOMAIN` | `true` | Generic STEM titles need energy/materials/chemistry/sustainability evidence when a description is available; unknown descriptions remain eligible with an uncertainty indicator |
+| `FILTER_BY_LOCATION` | `true` | Reject known overseas roles; accept explicitly UK-eligible remote roles |
 | `MIN_MATCH_SCORE` | `65` | Minimum AI score to act on a job (`--with-ai` only) |
 | `EMAIL_MIN_SCORE` | `70` | Minimum AI score for new-job email alerts |
-| `EMAIL_MAX_POSTED_DAYS` | `1` | Only email 70+ jobs posted within this many calendar days (`1` = today and yesterday). `0` disables the age filter |
+| `EMAIL_MAX_POSTED_DAYS` | `2` | Only email 70+ jobs posted today or within the previous two calendar days. `0` disables the age filter |
 | `EMAIL_ATTACH_MATERIALS` | `false` | Attach tailored resume and cover letter PDFs to 70+ job alerts. Keep `false` on the first fetch to avoid generating files (and spending tokens) for every matching job |
 | `JOB_LOOKBACK` | `r604800` | LinkedIn time filter (604800 s = last 7 days) |
 | `COMPANIES_CONFIG_PATH` | `config/companies.json` | Path to your company shortlist JSON |
 | `TARGET_COMPANIES` | *(none)* | Alternative: comma-separated companies in `.env` |
 | `RESUME_PATH` | `resume/master_resume.txt` | Path to master resume for AI mode |
-| `RESUME_MIN_ATS_SCORE` | `80` | Minimum ATS keyword coverage for generated resumes. Missing JD skills are added until this floor is met |
-| `RESUME_TARGET_ATS_SCORE` | `90` | Preferred ATS coverage after skill injection (capped at 90) |
+| `RESUME_MIN_ATS_SCORE` | `80` | Legacy diagnostic target; missing skills are reported, never inserted |
+| `RESUME_TARGET_ATS_SCORE` | `90` | Legacy diagnostic target; truthful CV content takes priority |
 
 ### Experience filter
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EXPERIENCE_YEARS` | `4` | Your years of experience |
-| `EXPERIENCE_MIN` | `2` | Accept jobs requiring at least this many years |
-| `EXPERIENCE_MAX` | `4` | Reject jobs requiring more than this many years |
-| `FILTER_BY_EXPERIENCE` | `true` | Enable/disable experience filtering |
-| `MAX_EDUCATION` | `masters` | Highest degree you have; jobs requiring more (e.g. PhD) are dropped |
+| `EXPERIENCE_YEARS` | `0` | Full-time professional experience; academic projects/internships do not count as industry employment |
+| `EXPERIENCE_MIN` | `0` | Displayed profile minimum; no lower-bound rejection of graduate jobs |
+| `EXPERIENCE_MAX` | `0` | Reject unmet mandatory professional requirements above this ceiling |
+| `FILTER_BY_EXPERIENCE` | `true` | Enable/disable seniority and mandatory experience filtering |
+| `MAX_EDUCATION` | `bachelors` | Degree ceiling: bachelors, masters or phd; only mandatory higher qualifications are rejected |
 | `FILTER_BY_EDUCATION` | `true` | Enable/disable education filtering |
+| `REJECT_12_MONTH_CONTRACT` | `true` | Reject explicit 12-month/one-year contracts independently of other filters |
 
 ### Fetch settings
 
@@ -278,10 +314,15 @@ All settings are loaded from `.env` and `config/companies.json` by `config.py`. 
 |----------|---------|-------------|
 | `CHECK_INTERVAL_MINUTES` | `15` | How often the background poller fetches new jobs |
 | `FETCH_CONCURRENCY` | `8` | Parallel threads for **career-site** fetches (LinkedIn is always sequential) |
+| `WORKDAY_SEARCH_TERMS` | `graduate,energy,sustainability,materials,scientist,analyst,engineer` | One rotating term per board per cycle; empty fetches all roles within the existing 400-result cap. Explicit legacy `WORKDAY_SEARCH_TEXT` overrides other than `graduate` remain supported when this setting is absent |
+| `ENABLE_BROAD_LINKEDIN_SEARCH` | `true` | Add company-independent role/domain searches alongside the shortlist |
+| `BROAD_SEARCH_QUERIES` | 14 graduate/energy/materials queries in `env.template` | Comma-separated broad search phrases, using `JOB_LOCATION` |
+| `BROAD_SEARCH_QUERIES_PER_CYCLE` | `4` | Rotating broad queries per cycle, sharing the existing total search cap with company queries |
+| `ATS_DETAIL_REQUESTS_PER_BOARD` | `10` | Maximum official SmartRecruiters/Workday detail attempts per board fetch; reuse cached descriptions and rotate pending attempts. `0` disables detail requests |
 | `LINKEDIN_MIN_DELAY_SECONDS` | `6` | Minimum pause between LinkedIn requests (~10/min) |
 | `LINKEDIN_MAX_REQUESTS_PER_MINUTE` | `10` | Hard cap on LinkedIn requests per rolling minute |
 | `LINKEDIN_MAX_REQUESTS_PER_HOUR` | `80` | Hard cap on LinkedIn requests per rolling hour |
-| `LINKEDIN_MAX_SEARCHES_PER_CYCLE` | `20` | Company searches per fetch; the rest rotate on later cycles |
+| `LINKEDIN_MAX_SEARCHES_PER_CYCLE` | `20` | Combined company and broad searches per fetch; reserve company capacity and rotate remaining queries |
 | `SCORE_BATCH_SIZE` | `80` | Jobs scored per Gemini call after fetch |
 
 ### API keys
@@ -302,7 +343,7 @@ All settings are loaded from `.env` and `config/companies.json` by `config.py`. 
 
 ## Email setup
 
-Set `NOTIFY_EMAIL` to the address that should receive alerts, then configure **one** transport below. Alerts go out after AI scoring and only include **new** jobs with a match score of **70** or higher (`EMAIL_MIN_SCORE`) that were posted **today or yesterday** (`EMAIL_MAX_POSTED_DAYS=1`). Each listing in the email shows its score. A job is emailed **once**; after a successful send it is not included in later alerts.
+Set `NOTIFY_EMAIL` to the address that should receive alerts, then configure **one** transport below. Alerts go out after AI scoring and only include **new**, eligible jobs with a match score of **70** or higher (`EMAIL_MIN_SCORE`) posted today or within the previous two calendar days (`EMAIL_MAX_POSTED_DAYS=2`). Each listing in the email shows its score. A job is emailed **once**; after a successful send it is not included in later alerts.
 
 Set `EMAIL_ATTACH_MATERIALS=true` to generate (or reuse) a tailored resume and cover letter PDF for each 70+ job and attach them to the alert. Leave this **false** until after the initial fetch, or the first run can create a large number of files and spend many LLM tokens.
 
@@ -317,15 +358,7 @@ NOTIFY_EMAIL=your.email@gmail.com
 GMAIL_APP_PASSWORD=your_16_char_app_password
 ```
 
-### Option 2 — Resend
-
-```env
-NOTIFY_EMAIL=your.email@gmail.com
-RESEND_API_KEY=re_xxxxxxxx
-RESEND_FROM=onboarding@resend.dev
-```
-
-### Option 3 — Custom SMTP
+### Option 2 — Custom SMTP
 
 ```env
 NOTIFY_EMAIL=your.email@gmail.com
@@ -338,7 +371,7 @@ SMTP_FROM_NAME=Job Agent
 SMTP_USE_TLS=true
 ```
 
-### Option 4 — Maileroo API
+### Option 3 — Maileroo API
 
 ```env
 NOTIFY_EMAIL=your.email@gmail.com
@@ -372,7 +405,7 @@ AI_PROVIDER=auto
 
 Also copy your resume to `resume/master_resume.txt`.
 
-**Dashboard:** listings are sorted by **Highest match** by default. After each fetch the API scores unscored jobs in the background (one integer 0–100, no match writeup). A compact “Scoring N / total” line appears while that runs. Email alerts then include only **new** jobs scoring **70+** that were posted today or yesterday, with the score in the message. **Generate resume** and **Generate cover letter** stay click-only. Resume generation rewrites existing experience bullets, and rewrites the summary only if the master resume has a Summary section; Python keeps headers, skills (reordered from your catalog), project, education, and certs, then writes a one-page PDF with the same contact/project hyperlinks as your master resume. Cover letters use a JD-ranked fact pack and a Python letter shell so the model only writes three short body paragraphs, then a one-page justified PDF. Unscored jobs sort last. Per-card **Re-score** still works.
+**Dashboard:** listings are sorted by **Highest match** by default. After each fetch the API scores unscored jobs in the background (one integer 0–100, no match writeup). A compact “Scoring N / total” line appears while that runs. Email alerts include eligible new jobs scoring **70+** posted today or within the previous two calendar days. **Generate resume** and **Generate cover letter** stay click-only with `EMAIL_ATTACH_MATERIALS=false`. Resume generation rewrites existing research/experience bullets and an existing summary; Python preserves headers, evidenced skills, projects, education and certifications, then writes a one-page PDF. Missing skills remain ATS diagnostics. Cover letters use a fact pack extracted from your CV. Unscored jobs sort last. Per-card **Re-score** still works.
 
 **CLI:**
 
@@ -446,7 +479,7 @@ job-agent/
 │   └── ats/                   # Greenhouse, Lever, Ashby, SmartRecruiters
 ├── notifications/
 │   ├── email_notifier.py      # SMTP email sender
-│   ├── resend_api.py          # Resend transport
+│   ├── dispatch.py            # Eligible high-score job alerts
 │   └── maileroo_api.py        # Maileroo transport
 ├── resume/
 │   ├── master_resume.example.txt  # Resume template (committed)
@@ -468,8 +501,12 @@ job-agent/
 
 Each fetch pulls from:
 
-1. **Career-site APIs** — Greenhouse, Lever, Ashby, SmartRecruiters (parallel, with ATS auto-discovery)
-2. **LinkedIn** — guest job search API, strictly rate-limited (one request at a time, ~10/min, rotating a subset of companies each cycle)
+1. **Career-site APIs** — Greenhouse, Lever, Ashby, SmartRecruiters and Workday, for shortlisted companies, with supported ATS discovery. SmartRecruiters and Workday use bounded official JSON detail enrichment. Workday rotates one search term per board without increasing its pagination budget.
+2. **LinkedIn** — company searches **and** company-independent graduate/domain searches. Results from unlisted employers are eligible. With the default five companies and four broad queries, each cycle plans nine searches; all still use the existing serialized rate limiter and shared search/description budget. Search requests precede description requests, so enrichment does not consume the quota before broad discovery starts. Description candidates then take turns across queries to share the remaining quota.
+
+Broad query cursors advance only for attempted searches. The 14 default phrases rotate four at a time, wrapping around; larger company shortlists rotate within the remaining search slots. Workday terms rotate independently for each board. Rotation cursors are in memory and reset when the process restarts; use the continuous CLI or API poller to cover subsequent cycles.
+
+Discovery uses a broad STEM title prefilter, then full-description eligibility/domain checks, then optional AI scoring. Generic graduate programmes, consultants, scientists and research assistants need relevant domain evidence when their descriptions are known. Missing descriptions remain visible as **Description unavailable**, with an incomplete-evaluation tooltip and a maximum AI score of 60, below the email threshold. London and London-hybrid preference, followed by UK-remote preference, remains in the scoring rubric; UK eligibility filtering does not make all UK locations equally preferred.
 
 Jobs are deduplicated by:
 

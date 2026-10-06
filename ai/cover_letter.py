@@ -25,7 +25,8 @@ from config import COVER_LETTERS_OUTPUT_DIR, MASTER_RESUME_PATH, USER_PROFILE
 
 COVER_SYSTEM = (
     "You write a 3-paragraph cover letter from the fact pack only. "
-    "NEVER invent employers, titles, dates, skills, or metrics. Return ONLY JSON."
+    "NEVER invent employers, titles, dates, skills, years of industry experience, or metrics. "
+    "Keep academic research/projects/internships identified as academic. Return ONLY JSON."
 )
 
 COVER_PROMPT = """ROLE: {title} at {company}
@@ -49,22 +50,6 @@ _MAX_HIGHLIGHTS = 8
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 _MASTER_RESUME_PDF = MASTER_RESUME_PATH.with_suffix(".pdf")
 _MARGIN = 65
-_INDIA_PLACE = re.compile(
-    r"\b("
-    r"india|bharat|"
-    r"andhra pradesh|arunachal pradesh|assam|bihar|chhattisgarh|goa|gujarat|"
-    r"haryana|himachal pradesh|jharkhand|karnataka|kerala|madhya pradesh|"
-    r"maharashtra|manipur|meghalaya|mizoram|nagaland|odisha|orissa|punjab|"
-    r"rajasthan|sikkim|tamil nadu|telangana|tripura|uttar pradesh|uttarakhand|"
-    r"west bengal|delhi|new delhi|ncr|"
-    r"bengaluru|bangalore|mumbai|bombay|hyderabad|chennai|madras|pune|"
-    r"kolkata|calcutta|ahmedabad|jaipur|lucknow|kanpur|nagpur|indore|"
-    r"bhopal|patna|coimbatore|kochi|cochin|thiruvananthapuram|trivandrum|"
-    r"visakhapatnam|mysore|mysuru|noida|gurugram|gurgaon|ghaziabad|"
-    r"chandigarh|navi mumbai|thane"
-    r")\b",
-    re.I,
-)
 
 
 def _identity(template: dict) -> str:
@@ -77,7 +62,7 @@ def _identity(template: dict) -> str:
         title = left.split("|")[0].strip() if "|" in left else left.strip()
     parts = [name]
     if years != "":
-        parts.append(f"{years}y")
+        parts.append(f"{years} years of full-time professional experience")
     if title:
         parts.append(title)
     return ", ".join(part for part in parts if part)
@@ -267,25 +252,9 @@ def _letter_styles(font_size: float, leading: float, space_after: float) -> dict
     }
 
 
-def _job_is_outside_india(job: dict) -> bool:
-    location = str(job.get("location") or "").strip()
-    if not location:
-        return False
-    return not bool(_INDIA_PLACE.search(location))
-
-
 def _contact_line_for_job(contact: str, job: dict) -> str:
-    text = (contact or "").strip()
-    if not text or not _job_is_outside_india(job):
-        return text
-    parts = [part.strip() for part in text.split("|") if part.strip()]
-    if not parts:
-        return text
-    first = parts[0]
-    if re.search(r"\bindia\b", first, re.I):
-        return " | ".join(parts)
-    parts[0] = f"{first}, India"
-    return " | ".join(parts)
+    """Preserve the candidate's contact details; never infer or append a country."""
+    return (contact or "").strip()
 
 
 def _format_date(date_str: str) -> str:

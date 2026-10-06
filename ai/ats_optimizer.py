@@ -3,7 +3,6 @@ import logging
 import re
 
 from ai.llm import extract_json, generate
-from config import EXPERIENCE_YEARS, RESUME_TARGET_ATS_SCORE
 
 logger = logging.getLogger(__name__)
 
@@ -500,7 +499,6 @@ _PREFIX_RE = re.compile(
     re.I,
 )
 _YEARS_RE = re.compile(r"\s*\(\d+\+?\s*years?\)\s*$", re.I)
-_YEARS_IN_PROSE = re.compile(r"(\d+)\s*\+?\s*(?:years?|yrs)\b", re.I)
 _KNOWN_CANON = {_ALIASES.get(item.lower(), item.lower()) for item in _KNOWN_SKILLS}
 for _members in _CATEGORIES.values():
     _KNOWN_CANON.update(_members)
@@ -894,25 +892,9 @@ def prepare_skills(
     jd_skills, extra_keywords = extract_jd_terms(job_description, job_title, company)
     prepared = copy.deepcopy(groups)
     added: list[str] = []
-
-    prepared, added_skills = inject_skills(
-        prepared,
-        missing_from_groups(prepared, jd_skills),
-        job_title,
-        company,
-    )
-    added.extend(added_skills)
-
+    # Reorder only evidenced skills. ATS gaps are diagnostics, not permission
+    # to claim techniques/tools absent from the candidate's CV.
     lines = format_skill_lines(prepared, jd_skills)
-    preview = "\n".join(lines)
-    preview_score = score_resume(preview, jd_skills, extra_keywords, job_title)
-    if preview_score["score"] < RESUME_TARGET_ATS_SCORE:
-        still = missing_from_groups(
-            prepared, extra_keywords + preview_score["missing_skills"]
-        )
-        prepared, added_extra = inject_skills(prepared, still, job_title, company)
-        added.extend(added_extra)
-        lines = format_skill_lines(prepared, jd_skills + extra_keywords)
 
     return {
         "groups": prepared,
@@ -934,18 +916,8 @@ def boost_resume_skills(
     company: str = "",
 ) -> tuple[dict, dict, list[str]]:
     result = score_resume_data(data, jd_skills, extra_keywords, job_title)
-    if result["score"] >= min_score:
-        return data, result, already_added
-
-    to_add = [
-        item
-        for item in result["missing_skills"] + result["missing_keywords"]
-        if _is_plausible_skill(item, job_title, company)
-    ]
-    groups, added = inject_skills(groups, to_add, job_title, company)
-    already_added = list(already_added) + added
-    data["skills"] = format_skill_lines(groups, jd_skills + extra_keywords)
-    result = score_resume_data(data, jd_skills, extra_keywords, job_title)
+    # Preserve the existing public signature, but never manufacture skills to
+    # meet a minimum ATS score.
     return data, result, already_added
 
 
@@ -958,19 +930,8 @@ def jd_min_years(job_description: str, job_title: str = "") -> int | None:
 
 
 def align_summary_years(summary: str, job_description: str, job_title: str = "") -> str:
-    required = jd_min_years(job_description, job_title)
-    if required is None:
-        return summary
-    target = max(required, EXPERIENCE_YEARS)
-
-    def _replace(match: re.Match) -> str:
-        stated = int(match.group(1))
-        if stated >= target:
-            return match.group(0)
-        return f"{target}+ years"
-
-    updated, count = _YEARS_IN_PROSE.subn(_replace, summary or "", count=1)
-    return updated if count else summary
+    """Keep candidate claims unchanged; a JD cannot add years of experience."""
+    return summary
 
 
 def scrub_jd_prose(text: str, job_title: str = "", company: str = "") -> str:

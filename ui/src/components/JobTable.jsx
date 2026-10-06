@@ -29,6 +29,9 @@ const JobTableRow = memo(function JobTableRow({
             {applied && <span className="badge-applied">Applied</span>}
             {job.is_new && !applied && <span className="badge-new">New</span>}
             <span className={`badge-source badge-${source}`}>{sourceLabel}</span>
+            {job.description_status === "unavailable" && (
+              <span className="badge-source" title="Match not fully evaluated: no full job description is available.">Description unavailable</span>
+            )}
           </div>
         </div>
       </td>

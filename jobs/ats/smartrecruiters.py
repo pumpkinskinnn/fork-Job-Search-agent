@@ -3,6 +3,7 @@ import logging
 import requests
 
 from jobs.ats.base import make_dedup_hash, normalize_job_id
+from jobs.location_filter import location_matches
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,9 @@ def fetch_smartrecruiters_jobs(company: str, slug: str, location_filter: str = "
         for item in content:
             loc = item.get("location", {})
             location = loc.get("fullLocation", loc.get("city", "")) if isinstance(loc, dict) else str(loc)
+            country = loc.get("country", "") if isinstance(loc, dict) else ""
+            if country:
+                location = f"{location}, {country}"
 
             jobs.append(
                 {
@@ -42,7 +46,9 @@ def fetch_smartrecruiters_jobs(company: str, slug: str, location_filter: str = "
                     "company": company,
                     "location": location,
                     "posted_date": item.get("releasedDate", "")[:10],
-                    "job_url": item.get("ref", ""),
+                    "job_url": item.get("ref") or f"https://api.smartrecruiters.com/v1/companies/{slug}/postings/{item['id']}",
+                    "detail_url": f"https://api.smartrecruiters.com/v1/companies/{slug}/postings/{item['id']}",
+                    "description": item.get("description", "") or "",
                     "source": "smartrecruiters",
                     "source_company": company,
                     "dedup_hash": make_dedup_hash(company, item.get("name", ""), location),
@@ -54,7 +60,8 @@ def fetch_smartrecruiters_jobs(company: str, slug: str, location_filter: str = "
             break
 
     if location_filter:
-        loc_lower = location_filter.lower()
-        jobs = [j for j in jobs if loc_lower in j.get("location", "").lower() or loc_lower in ("remote", "india")]
+        # Generic remote locations need detail text before UK eligibility can be checked.
+        from jobs.location_filter import location_needs_description
+        jobs = [j for j in jobs if location_matches(j) or location_needs_description(j)]
 
     return jobs

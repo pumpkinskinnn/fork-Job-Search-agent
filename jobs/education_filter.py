@@ -1,88 +1,38 @@
 import re
 
-from config import FILTER_BY_EDUCATION
+from config import FILTER_BY_EDUCATION, MAX_EDUCATION
+from jobs.requirements_text import REQUIRED, is_optional, qualification_clauses
 
-_PHD = re.compile(
-    r"\b("
-    r"ph\.?\s*d\.?s?|"
-    r"dphil|"
-    r"doctorate|"
-    r"doctoral|"
-    r"post[\s-]?doc(?:toral)?"
-    r")\b",
-    re.I,
-)
-
-_MASTERS_OR_BELOW = re.compile(
-    r"\b("
-    r"masters?|"
-    r"master'?s|"
-    r"m\.?\s*s\.?|"
-    r"m\.?\s*sc\.?|"
-    r"m\.?\s*tech\.?|"
-    r"mtech|"
-    r"mba|"
-    r"bachelors?|"
-    r"bachelor'?s|"
-    r"b\.?\s*s\.?|"
-    r"b\.?\s*tech\.?|"
-    r"btech|"
-    r"undergraduate|"
-    r"bs/?ms"
-    r")\b",
-    re.I,
-)
-
-_PREFERRED = re.compile(
-    r"\b("
-    r"preferred|"
-    r"preferably|"
-    r"nice\s+to\s+have|"
-    r"a\s+plus|"
-    r"is\s+a\s+plus|"
-    r"optional|"
-    r"bonus|"
-    r"desired|"
-    r"ideally"
-    r")\b",
-    re.I,
-)
-
-_EQUIVALENT = re.compile(r"\b(or\s+equivalent|equivalent\s+experience)\b", re.I)
-
-
-def _plain_text(text: str) -> str:
-    if not text:
-        return ""
-    text = re.sub(r"<[^>]+>", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _window(text: str, start: int, end: int, radius: int = 100) -> str:
-    return text[max(0, start - radius) : min(len(text), end + radius)]
+_BACHELORS = re.compile(r"\b(?:bachelor['’]?s?|b\.?\s*sc\.?|b\.?\s*s\.?|beng|btech|undergraduate|STEM\s+degree)\b", re.I)
+_MASTERS = re.compile(r"\b(?:master['’]?s?|m\.?\s*sc\.?|m\.?\s*s\.?|mres|meng|mtech|mba|postgraduate\s+degree)\b", re.I)
+_PHD = re.compile(r"\b(?:ph\.?\s*d\.?|dphil|doctorate|doctoral|post[ -]?doc(?:toral)?)\b", re.I)
+_LEVELS = {"bachelors": 1, "bachelor": 1, "bsc": 1, "masters": 2, "master": 2, "msc": 2, "phd": 3, "doctorate": 3}
 
 
 def education_matches(job: dict) -> bool:
-    """True if the job does not require more than a master's degree."""
+    """Reject mandatory qualifications above the configured degree, not preferences."""
     if not FILTER_BY_EDUCATION:
         return True
-
-    title = job.get("title", "") or ""
-    description = _plain_text(job.get("description", "") or "")
-    combined = f"{title} {description}".strip()
-
-    if not _PHD.search(combined):
-        return True
-
-    if _PHD.search(title) and not _MASTERS_OR_BELOW.search(title) and not _EQUIVALENT.search(title):
-        return False
-
-    for match in _PHD.finditer(combined):
-        window = _window(combined, match.start(), match.end())
-        if _MASTERS_OR_BELOW.search(window) or _EQUIVALENT.search(window):
+    ceiling = _LEVELS.get(MAX_EDUCATION, 1)
+    text = f"{job.get('title') or ''}\n{job.get('description') or ''}"
+    for clause in qualification_clauses(text):
+        if is_optional(clause):
             continue
-        if _PREFERRED.search(window):
+        if re.search(r"\bno\s+(?:master['’]?s?|m\.?sc\.?|ph\.?d\.?|postgraduate\s+degree)"
+                     r"(?:\s+\w+){0,3}\s+(?:required|needed|necessary)\b", clause, re.I):
             continue
-        return False
-
+        higher = (_MASTERS.search(clause) if ceiling < 2 else None) or (_PHD.search(clause) if ceiling < 3 else None)
+        if not higher:
+            continue
+        lower = _BACHELORS.search(clause) or (_MASTERS.search(clause) if ceiling >= 2 else None)
+        between = ""
+        if lower:
+            first, second = sorted((lower, higher), key=lambda match: match.start())
+            between = clause[first.end():second.start()]
+        alternative = bool(lower and re.search(r"\b(?:or|and/or)\b|/", between, re.I)
+                           and not re.search(r"\b(?:with|plus)\b", between, re.I))
+        if alternative:
+            continue
+        if REQUIRED.search(clause) or re.search(r"\b(?:post[ -]?doc(?:toral)?|phd\s+studentship)\b", clause, re.I):
+            return False
     return True

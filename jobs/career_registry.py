@@ -5,6 +5,7 @@ from config import USER_PROFILE
 # ats: greenhouse | lever | ashby | smartrecruiters | workday
 # slug: board identifier. Workday uses '{host}/{site}'.
 KNOWN_ATS = {
+    "Octopus Energy": {"ats": "lever", "slug": "octoenergy"},
     "Adobe": {"ats": "workday", "slug": "adobe.wd5.myworkdayjobs.com/external_experienced"},
     "Airbnb": {"ats": "greenhouse", "slug": "airbnb"},
     "Broadcom": {"ats": "workday", "slug": "broadcom.wd1.myworkdayjobs.com/External_Career"},
@@ -73,6 +74,11 @@ KNOWN_ATS = {
 
 # Career page URLs used to auto-discover ATS slugs when not in KNOWN_ATS
 CAREER_URLS = {
+    "Octopus Energy": "https://octopus.energy/careers/",
+    "EDF": "https://careers.edfenergy.com/",
+    "National Grid": "https://jobs.nationalgrid.com/",
+    "Johnson Matthey": "https://matthey.com/careers",
+    "Arup": "https://www.arup.com/careers/",
     "Google": "https://careers.google.com/jobs/results/",
     "Meta": "https://www.metacareers.com/jobs",
     "Microsoft": "https://careers.microsoft.com/us/en/search-results",

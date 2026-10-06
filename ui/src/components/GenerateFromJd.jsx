@@ -125,7 +125,7 @@ export default function GenerateFromJd({ aiConfigured }) {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Senior Software Engineer"
+              placeholder="Graduate Energy Analyst"
               autoComplete="off"
             />
           </label>

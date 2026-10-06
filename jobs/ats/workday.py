@@ -1,10 +1,12 @@
 import logging
 import re
+import threading
 
 import requests
 
 from jobs.ats.base import make_dedup_hash, normalize_job_id
 from jobs.http_client import get_session
+from config import WORKDAY_SEARCH_TERMS
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,17 @@ HEADERS = {
 
 PAGE_SIZE = 20
 MAX_JOBS = 400
-SEARCH_TEXT = "Software"
+_search_offsets: dict[str, int] = {}
+_search_lock = threading.Lock()
+
+
+def next_workday_search_term(slug: str) -> str:
+    """One rotating query per board invocation; pagination budget is unchanged."""
+    terms = WORKDAY_SEARCH_TERMS or [""]
+    with _search_lock:
+        offset = _search_offsets.get(slug, 0)
+        _search_offsets[slug] = offset + 1
+    return terms[offset % len(terms)]
 
 
 def _parse_slug(slug: str) -> tuple[str, str, str] | None:
@@ -43,13 +55,14 @@ def fetch_workday_jobs(company: str, slug: str) -> list[dict]:
     session = get_session()
     jobs: list[dict] = []
     offset = 0
+    search_term = next_workday_search_term(slug)
 
     while offset < MAX_JOBS:
         payload = {
             "appliedFacets": {},
             "limit": PAGE_SIZE,
             "offset": offset,
-            "searchText": SEARCH_TEXT,
+            "searchText": search_term,
         }
         try:
             response = session.post(url, json=payload, headers=HEADERS, timeout=20)
@@ -81,6 +94,7 @@ def fetch_workday_jobs(company: str, slug: str) -> list[dict]:
                     "job_url": job_url,
                     "source": "workday",
                     "source_company": company,
+                    "description": item.get("jobDescription") or "",
                     "dedup_hash": make_dedup_hash(company, title, location),
                 }
             )
