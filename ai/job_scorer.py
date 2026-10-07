@@ -7,6 +7,7 @@ from config import MASTER_RESUME_PATH, SCORE_BATCH_SIZE, USER_PROFILE
 from ai.llm import extract_json, generate
 from ai.resume_sections import split_resume_sections
 from ai.candidate_profile import PROFILE_CHAR_LIMIT, build_candidate_profile
+from ai.job_evidence import JOB_EVIDENCE_CHAR_LIMIT, EvidenceBudgetError, select_job_evidence
 from jobs.experience_filter import requires_professional_experience
 from jobs.profile_filter import profile_matches
 
@@ -28,17 +29,14 @@ SCORE_SYSTEM = (
     "permanent graduate roles. Preferred/desirable experience or postgraduate degrees are not requirements. "
     "Keep ambiguous experience wording for assessment. A 0-1 years range includes a fresh graduate. "
     "Score 0-10 for unmet mandatory professional experience, senior roles, mandatory Master's/PhD "
-    "without a BSc alternative, or explicit 12-month fixed-term contracts. Keywords cannot compensate. "
+    "without a BSc alternative, incompatible required degree disciplines or graduation years, "
+    "or explicit 12-month fixed-term contracts. Keywords cannot compensate. "
     "Prioritise London and reasonable London-hybrid roles, then explicitly UK-remote roles. "
     "Do not recommend international roles or assume remote means eligible from the UK. "
     "Missing descriptions/unknown eligibility are uncertainty: do not award a confident 70+ match "
     "without evidence of graduate suitability and practical UK fit."
 )
 
-_REQ_HEADING = re.compile(
-    r"(requirements|qualifications|what you.?ll need|must[- ]have|you have|what we.?re looking)",
-    re.I,
-)
 _KEEP_HEADING = re.compile(
     r"(responsibilities|requirements|qualifications|what you.?ll (?:need|do)|"
     r"what you will (?:need|do)|must[- ]have|you have|what we.?re looking|"
@@ -53,7 +51,8 @@ _DROP_HEADING = re.compile(
     r"interview process)",
     re.I,
 )
-_JD_CHARS = 1600
+_JD_CHARS = JOB_EVIDENCE_CHAR_LIMIT
+_SCORE_PROMPT_CHARS = 48000  # Includes the system prompt, profile and all listings.
 _RESUME_JD_CHARS = 1600
 _PROFILE_CHARS = PROFILE_CHAR_LIMIT
 
@@ -102,11 +101,7 @@ def _pipe_field(value: str, max_len: int | None = None) -> str:
 
 
 def _jd_snippet(description: str, limit: int = _JD_CHARS) -> str:
-    plain = _plain_text(description)
-    match = _REQ_HEADING.search(plain)
-    if match:
-        plain = plain[match.start() :]
-    return _pipe_field(plain, limit)
+    return select_job_evidence(description, limit)
 
 
 def _plain_blocks(html: str) -> str:
@@ -149,7 +144,9 @@ def _listing_line(index: int, job: dict, jd_limit: int = _JD_CHARS) -> str:
     location = _pipe_field(job.get("location") or "", 40)
     snippet = _jd_snippet(fetch_job_description(job), jd_limit)
     barrier = "Mandatory experience exceeds candidate: YES. " if requires_professional_experience(job) else ""
-    return f"{index}|{title}|{company}|{location}|{barrier}{snippet}"
+    if not profile_matches(job):
+        barrier += "Deterministic eligibility mismatch: maximum score 10. "
+    return f"{index}|{title}|{company}|{location}|{barrier}{_pipe_field(snippet)}"
 
 
 def _parse_scores(text: str, expected: int) -> list[int]:
@@ -171,23 +168,35 @@ def _persist_score(job: dict, score: int, description: str | None = None) -> dic
     return result
 
 
-def _score_jobs_once(jobs: list[dict], *, persist: bool) -> list[dict]:
-    profile = distilled_profile()
-    lines = [_listing_line(index, job) for index, job in enumerate(jobs, start=1)]
-    prompt = (
+def _score_prompt(profile: str, lines: list[str]) -> str:
+    return (
         f"Candidate:\n{profile}\n\n"
         "Jobs (index|title|company|location|jd):\n"
         + "\n".join(lines)
-        + f"\n\nReturn {{\"s\":[exactly {len(jobs)} integers 0-100]}} with length {len(jobs)}."
+        + f"\n\nReturn {{\"s\":[exactly {len(lines)} integers 0-100]}} with length {len(lines)}."
     )
-    response_text = generate(
-        SCORE_SYSTEM,
-        prompt,
-        max_tokens=512,
-        json_mode=True,
-        purpose="score",
-    )
-    scores = _parse_scores(response_text, len(jobs))
+
+
+def _score_jobs_once(jobs: list[dict], *, persist: bool) -> list[dict]:
+    profile = distilled_profile()
+    # Prepare once, then pack complete listing evidence into bounded requests.
+    # Never shrink eligibility sections to accommodate a larger batch.
+    prepared = [_listing_line(index, job) for index, job in enumerate(jobs, start=1)]
+    batches = []
+    batch = []
+    for line in prepared:
+        if batch and (len(batch) >= max(1, SCORE_BATCH_SIZE)
+                      or len(SCORE_SYSTEM) + len(_score_prompt(profile, batch + [line])) > _SCORE_PROMPT_CHARS):
+            batches.append(batch)
+            batch = []
+        batch.append(line)
+        if len(SCORE_SYSTEM) + len(_score_prompt(profile, batch)) > _SCORE_PROMPT_CHARS:
+            raise EvidenceBudgetError("A complete listing and candidate profile exceed the scoring prompt budget")
+    if batch:
+        batches.append(batch)
+    scores = []
+    for lines in batches:
+        scores.extend(_request_scores(_score_prompt(profile, lines), len(lines)))
     results = []
     for job, score in zip(jobs, scores):
         # Check the full JD, not the token-limited snippet or model's judgement.
@@ -201,6 +210,17 @@ def _score_jobs_once(jobs: list[dict], *, persist: bool) -> list[dict]:
     return results
 
 
+def _request_scores(prompt: str, count: int) -> list[int]:
+    response_text = generate(
+        SCORE_SYSTEM,
+        prompt,
+        max_tokens=512,
+        json_mode=True,
+        purpose="score",
+    )
+    return _parse_scores(response_text, count)
+
+
 def score_jobs_batch(jobs: list[dict], *, persist: bool = True) -> list[dict]:
     if not jobs:
         return []
@@ -212,6 +232,8 @@ def score_jobs_batch(jobs: list[dict], *, persist: bool = True) -> list[dict]:
             raise
     try:
         return _score_jobs_once(jobs, persist=persist)
+    except EvidenceBudgetError:
+        raise  # Splitting listings cannot repair incomplete evidence for one job.
     except Exception as exc:
         logger.warning("Batch of %d failed (%s); splitting", len(jobs), exc)
         mid = max(1, len(jobs) // 2)

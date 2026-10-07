@@ -102,6 +102,8 @@ def build_candidate_profile(resume: str, candidate: dict, limit: int = PROFILE_C
         f"{candidate.get('experience_years', 0)} years of full-time professional experience; "
         "academic projects/internships are not professional industry employment"
     )
+    if candidate.get("graduation_year"):
+        background += f"; candidate graduation year: {candidate['graduation_year']}"
     add("Practical/background", [background], inline=True, mandatory=(0,))
     if areas:
         add("Target areas", areas, inline=True, mandatory=range(len(areas)))

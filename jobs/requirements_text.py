@@ -17,6 +17,36 @@ NEGATED = re.compile(
     r"no\s+(?:(?:previous|prior|professional|industry|work|related|relevant|commercial)\s+)*experience\s+"
     r"(?:is\s+)?(?:required|needed|necessary))\b", re.I
 )
+REQUIRED_HEADINGS = {
+    "essential", "essential criteria", "requirements", "qualifications", "required",
+    "minimum requirements", "must have", "eligibility", "eligibility requirements",
+    "skills and requirements", "what you'll need", "what you will need", "what you'll have",
+    "what you will have", "what we're looking for", "what we are looking for",
+    "we're looking for", "your qualifications", "required qualifications", "education requirements",
+    "required skills", "required experience", "education", "what you'll bring", "what you will bring",
+}
+PREFERRED_HEADINGS = {
+    "preferred", "desirable", "desirable criteria", "nice to have", "optional",
+    "preferred qualifications", "preferred skills", "desirable qualifications", "desirable skills",
+}
+NEUTRAL_HEADINGS = {
+    "responsibilities", "benefits", "about us", "about the role", "duties", "what you'll do",
+    "what you will do", "the role", "additional information", "graduate development programme",
+    "training", "what we offer",
+}
+_ABBREVIATION_END = re.compile(r"(?:\b[A-Za-z]|\b[BM]\.(?:Sc|S|Eng)|\bPh\.D)\.$", re.I)
+
+
+def complete_sentences(text: str) -> list[str]:
+    """Split sentence/semicolon boundaries without splitting degree abbreviations."""
+    parts, start = [], 0
+    for match in re.finditer(r";|\.(?=\s|$)", text):
+        if match.group() == "." and _ABBREVIATION_END.search(text[:match.end()]):
+            continue
+        parts.append(text[start:match.start()])
+        start = match.end()
+    parts.append(text[start:])
+    return [part.strip() for part in parts if part.strip()]
 
 
 def plain_blocks(text: str) -> str:
@@ -44,33 +74,36 @@ def qualification_clauses(text: str) -> list[str]:
         line = re.sub(r"\s+", " ", line).strip()
         if not line:
             continue
-        heading = line.strip(" :•-").lower()
-        if heading in {"essential", "essential criteria", "requirements", "qualifications",
-                       "required", "minimum requirements", "must have"}:
+        head, colon, rest = line.partition(":")
+        heading = head.strip(" •-").lower().replace("’", "'")
+        if heading in REQUIRED_HEADINGS:
             context = "Required: "
-            continue
-        if heading in {"preferred", "desirable", "desirable criteria", "nice to have", "optional"}:
+        elif heading in PREFERRED_HEADINGS:
             context = "Preferred: "
-            continue
-        if heading in {"responsibilities", "benefits", "about us", "about the role", "duties"}:
+        elif heading in NEUTRAL_HEADINGS:
             context = ""
-            continue
-        for sentence in re.split(r";|(?<!\b[A-Za-z])\.(?=\s|$)", line):
+        else:
+            heading = ""
+        if heading:
+            line = rest.strip() if colon else ""
+            if not line:
+                continue
+        for sentence in complete_sentences(line):
             parts = re.split(r"(?:,\s*)?\b(?:but|however|whereas)\b\s+", sentence, flags=re.I)
             for part in parts:
                 chunks = re.split(
-                    r",|\s+and\s+(?=(?:(?:previous|prior|relevant)\s+)?"
-                    r"(?:professional|industry|commercial|consultancy|master|MSc|PhD|bachelor|BSc)\b)",
+                    r"(,|\s+and\s+(?=(?:(?:previous|prior|relevant)\s+)?"
+                    r"(?:professional|industry|commercial|consultancy|master|MSc|PhD|bachelor|BSc)\b))",
                     part, flags=re.I,
                 )
                 current = chunks[0]
-                for chunk in chunks[1:]:
+                for separator, chunk in zip(chunks[1::2], chunks[2::2]):
                     continuation = re.match(r"\s*(?:including|through|via|or|such\s+as)\b", chunk, re.I)
                     if (REQUIRED.search(current) or OPTIONAL.search(current)) and not continuation:
                         append_clause(current)
                         current = chunk
                     else:
-                        current += "," + chunk
+                        current += separator + chunk
                 if current.strip():
                     append_clause(current)
     return clauses

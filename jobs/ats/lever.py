@@ -3,10 +3,46 @@ import logging
 import requests
 
 from jobs.ats.base import make_dedup_hash, normalize_job_id
+from jobs.requirements_text import plain_blocks
 
 logger = logging.getLogger(__name__)
 
 HEADERS = {"User-Agent": "Mozilla/5.0 Chrome/120.0.0.0"}
+
+
+def _text(value) -> str:
+    if isinstance(value, list):
+        return "\n".join(filter(None, (_text(item) for item in value)))
+    if isinstance(value, dict):
+        return _text(value.get("content") or value.get("text") or value.get("value") or "")
+    if not value:
+        return ""
+    return "\n".join(
+        line.strip() for line in plain_blocks(str(value)).splitlines() if line.strip()
+    )
+
+
+def normalize_lever_description(item: dict) -> str:
+    """Retain the full official posting, including structured qualification lists."""
+    sections = []
+    description = _text(item.get("description") or item.get("descriptionPlain"))
+    if description:
+        sections.append(description)
+    for section in item.get("lists") or []:
+        heading = _text(section.get("text"))
+        content = _text(section.get("content"))
+        if content:
+            sections.append("\n".join(filter(None, (heading, content))))
+    requirements = _text(item.get("requirements") or item.get("requirementsPlain"))
+    if requirements:
+        sections.append("Requirements\n" + requirements)
+    additional = _text(item.get("additional") or item.get("additionalPlain"))
+    if additional:
+        sections.append("Additional information\n" + additional)
+    commitment = _text((item.get("categories") or {}).get("commitment"))
+    if commitment:
+        sections.append("Contract type: " + commitment)
+    return "\n\n".join(sections)
 
 
 def fetch_lever_jobs(company: str, slug: str) -> list[dict]:
@@ -39,7 +75,7 @@ def fetch_lever_jobs(company: str, slug: str) -> list[dict]:
                 "job_url": item.get("hostedUrl", item.get("applyUrl", "")),
                 "source": "lever",
                 "source_company": company,
-                "description": item.get("descriptionPlain") or item.get("description", "") or "",
+                "description": normalize_lever_description(item),
                 "dedup_hash": make_dedup_hash(company, item.get("text", ""), location),
             }
         )

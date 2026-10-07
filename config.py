@@ -82,6 +82,7 @@ EXPERIENCE_MIN = int(os.getenv("EXPERIENCE_MIN", "0"))
 EXPERIENCE_MAX = int(os.getenv("EXPERIENCE_MAX", str(EXPERIENCE_YEARS)))
 MAX_EDUCATION = os.getenv("MAX_EDUCATION", "bachelors").strip().lower() or "bachelors"
 FILTER_BY_EDUCATION = _parse_bool(os.getenv("FILTER_BY_EDUCATION", "true"))
+CANDIDATE_GRADUATION_YEAR = _parse_int(os.getenv("CANDIDATE_GRADUATION_YEAR", "2026"), 2026)
 REJECT_12_MONTH_CONTRACT = _parse_bool(os.getenv("REJECT_12_MONTH_CONTRACT", "true"))
 FILTER_BY_LOCATION = _parse_bool(os.getenv("FILTER_BY_LOCATION", "true"))
 WORKDAY_SEARCH_TEXT = os.getenv("WORKDAY_SEARCH_TEXT", "graduate").strip()
@@ -115,6 +116,7 @@ USER_PROFILE = {
     "education": "Recent BSc Chemistry graduate; First-Class Honours",
     "background": "University research projects/internships; no full-time professional industry experience",
     "experience_years": EXPERIENCE_YEARS,
+    "graduation_year": CANDIDATE_GRADUATION_YEAR,
     "min_match_score": int(os.getenv("MIN_MATCH_SCORE", "65")),
     "skills": _parse_csv(os.getenv("USER_SKILLS", "")),
     "job_lookback": os.getenv("JOB_LOOKBACK", "r604800").strip(),

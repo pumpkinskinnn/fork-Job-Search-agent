@@ -8,11 +8,13 @@ The workflow is **search → filter → score → display/email**. It does not s
 
 - Keep graduate/new-graduate, junior, entry-level, trainee and internship roles; scoring favours permanent graduate jobs over internships.
 - Reject senior/lead/principal/staff/manager/director/head/VP/chief titles. Ordinary Research Engineer titles are accepted.
-- Reject explicit mandatory industry/professional/commercial/consultancy experience, including positive minimum years. Keep preferences, zero-minimum ranges and academic/research/internship alternatives. Ambiguous experience is retained for scoring.
-- With `MAX_EDUCATION=bachelors`, reject mandatory Master's/PhD qualifications; keep postgraduate preferences and explicit BSc alternatives.
+- Reject explicit mandatory industry/professional/commercial/consultancy experience, including positive minimum years. Keep preferences, zero-minimum ranges, upper bounds such as "up to two years", and academic/research/internship alternatives. Graduate/training programme duration is not prior experience. Ambiguous experience is retained for scoring.
+- With `MAX_EDUCATION=bachelors`, reject mandatory Master's/PhD qualifications and incompatible required engineering degree disciplines; keep postgraduate preferences, explicit BSc alternatives, and Chemistry/materials/science/STEM/related-discipline alternatives.
+- `CANDIDATE_GRADUATION_YEAR=2026` rejects explicit incompatible applicant graduation cohorts. A programme start year does not specify the applicant's graduation year.
 - With `REJECT_12_MONTH_CONTRACT=true`, reject explicit 12-month/one-year contracts, fixed-term contracts, FTCs and temporary terms. Unrelated training durations are accepted.
 - With `FILTER_BY_LOCATION=true`, keep UK locations and explicitly UK-eligible remote roles. London/hybrid is prioritised by scoring; other UK roles score lower for practical fit. Known overseas locations and unspecified remote eligibility are rejected. Missing location/description is uncertain, not proof of eligibility.
 - Score with weights: graduate suitability 25%, energy/sustainability 25%, academic/technical fit 25%, transferable/analytical skills 15%, location/practical fit 10%. Clear hard-filter mismatches are capped at 10/100; missing descriptions are capped at 60/100, below the default email threshold.
+- Lever descriptions include every structured list, requirement and additional text block. Scoring selects complete facts from the whole JD, prioritising eligibility, qualifications, experience and contract type before duties/preferences. Excerpts are bounded to 2,400 characters per job; requests (including the system prompt) are bounded to 48,000 characters and split into smaller batches when necessary. If critical facts alone exceed the excerpt budget, scoring fails before the API request instead of omitting eligibility evidence.
 - CV research/project/internship headings are recognised without renaming. Tailoring preserves evidenced skills and never increases years of experience to satisfy a job description. ATS targets are diagnostics, not guarantees.
 
 Filters operate on available listing text and cannot infer missing requirements. Workday and SmartRecruiters list responses may omit descriptions; such listings need a full JD before reliable scoring and are not allowed to reach the default email threshold without one. Career-page discovery only supports known ATS platforms; some employers will be found through LinkedIn instead.
@@ -305,6 +307,7 @@ All settings are loaded from `.env` and `config/companies.json` by `config.py`. 
 | `EXPERIENCE_MAX` | `0` | Reject unmet mandatory professional requirements above this ceiling |
 | `FILTER_BY_EXPERIENCE` | `true` | Enable/disable seniority and mandatory experience filtering |
 | `MAX_EDUCATION` | `bachelors` | Degree ceiling: bachelors, masters or phd; only mandatory higher qualifications are rejected |
+| `CANDIDATE_GRADUATION_YEAR` | `2026` | Candidate's graduation cohort; explicit incompatible graduation years are rejected, programme start dates are allowed |
 | `FILTER_BY_EDUCATION` | `true` | Enable/disable education filtering |
 | `REJECT_12_MONTH_CONTRACT` | `true` | Reject explicit 12-month/one-year contracts independently of other filters |
 
