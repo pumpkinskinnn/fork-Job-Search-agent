@@ -7,6 +7,9 @@ from jobs.requirements_text import (
     NEUTRAL_HEADINGS, PREFERRED_HEADINGS, REQUIRED_HEADINGS, REQUIRED,
     complete_sentences, is_optional, plain_blocks,
 )
+from jobs.student_filter import requires_current_student
+from jobs.education_filter import _required_degree
+from jobs.experience_filter import _extract_year_requirements
 
 JOB_EVIDENCE_CHAR_LIMIT = 2400
 
@@ -21,6 +24,11 @@ _HEADINGS = {
     "additional information": "", "contract type": "contract",
     "benefits": "boilerplate", "about us": "boilerplate", "what we offer": "boilerplate",
     "equal opportunity": "boilerplate", "how to apply": "boilerplate",
+    "what we offer you": "boilerplate", "next steps": "boilerplate",
+    "different people, shared values": "boilerplate",
+    "is this role right for you?": "required", "about you": "required",
+    "the opportunity": "responsibilities", "recent projects include": "responsibilities",
+    "typical project engagements include": "responsibilities",
 }
 _DEGREE = re.compile(
     r"\b(?:degree|qualifications?|bachelor['’]?s?|b\.?\s*(?:sc|s|eng)|master['’]?s?|"
@@ -28,12 +36,20 @@ _DEGREE = re.compile(
 )
 _EXPERIENCE = re.compile(r"\bexperience\b|\b\d+[+-]?\s*years?\b", re.I)
 _ELIGIBILITY = re.compile(
-    r"\b(?:graduating|graduates?\s+(?:in|only)|graduation|class\s+of|"
-    r"right\s+to\s+work|work\s+(?:permission|authori[sz]ation)|visa|sponsorship|"
+    r"\b(?:graduating|graduated|graduates?\s+(?:in|only)|graduation|class\s+of|"
+    r"right\s+to\s+work|working\s+rights|work\s+(?:permission|authori[sz]ation)|visa|sponsorship|"
     r"nationality|citizenship|residen[ct]|security\s+clearance|UK[- ]based|programme\s+starts?)\b", re.I
 )
-_CONTRACT = re.compile(r"\b(?:contract|fixed[- ]term|FTC|temporary|permanent|full[- ]time|part[- ]time)\b", re.I)
+_CONTRACT = re.compile(r"\b(?:contract|placements?|fixed[- ]term|FTC|temporary|permanent|full[- ]time|part[- ]time)\b", re.I)
 _DUTIES = re.compile(r"\b(?:responsib|analyse|analyze|develop|research|model|synthesi[sz]e|support|deliver|investigate|assess)\w*\b", re.I)
+_BOILERPLATE = re.compile(
+    r"\b(?:equal opportunity|do not discriminate|regardless of|degree of flexibility|"
+    r"match your experience with the correct salary)\b", re.I
+)
+_EXPERIENCE_SCOPE = re.compile(
+    r"\b(?:previous|prior|professional|industry|commercial|work)\s+experience\b|"
+    r"\b(?:no more than|up to|at most|maximum(?: of)?)\s+\d+\s+months?\b", re.I
+)
 
 
 class EvidenceBudgetError(ValueError):
@@ -72,15 +88,30 @@ def _facts(description: str) -> list[_Fact]:
             if not REQUIRED.search(sentence) and not is_optional(sentence) and context in {"required", "preferred"}:
                 checked = context.title() + ": " + sentence
             optional = is_optional(checked)
+            student = requires_current_student(checked)
+            degree = bool(_DEGREE.search(sentence))
+            experience = bool(_EXPERIENCE.search(sentence) and (
+                context in {"required", "eligibility"} or REQUIRED.search(sentence)
+                or _EXPERIENCE_SCOPE.search(sentence)
+                or _extract_year_requirements(sentence)[0] is not None))
+            eligibility = bool(_ELIGIBILITY.search(sentence))
+            contract = bool(_CONTRACT.search(sentence))
+            # Benefits and EEO text can contain "degree", "experience",
+            # "nationality" and "permanent" without imposing eligibility.
+            # Preserve explicit requirements even under a misplaced heading.
+            explicit = bool(student or (degree and _required_degree(sentence))
+                            or ((experience or eligibility or contract) and REQUIRED.search(sentence)))
+            if (context == "boilerplate" or _BOILERPLATE.search(sentence)) and not explicit:
+                continue
             if optional:
                 priority, label = 6, "Preferred"
-            elif context == "eligibility" or _ELIGIBILITY.search(sentence):
+            elif student or eligibility:
                 priority, label = 0, "Eligibility"
-            elif _DEGREE.search(sentence):
+            elif degree:
                 priority, label = 1, "Qualifications"
-            elif _EXPERIENCE.search(sentence):
+            elif experience:
                 priority, label = 2, "Experience"
-            elif context == "contract" or _CONTRACT.search(sentence):
+            elif context == "contract" or contract:
                 priority, label = 3, "Contract"
             elif context == "required" or REQUIRED.search(sentence):
                 priority, label = 4, "Required skills"

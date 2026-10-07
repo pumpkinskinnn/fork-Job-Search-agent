@@ -44,7 +44,7 @@ class ScoringAndCvTests(unittest.TestCase):
                 self.assertIn("university research project", parsed["experience"][0]["bullets"][0])
                 self.assertIn("First-Class Honours", " ".join(parsed["education"]))
 
-    def test_score_caps_full_description_not_only_snippet(self):
+    def test_score_rejects_full_description_mismatch_before_model(self):
         jobs = [
             {"title": "Energy Analyst", "location": "London, UK",
              "description": "Renewable energy analysis. " * 100 + "Two years professional experience required."},
@@ -52,22 +52,23 @@ class ScoringAndCvTests(unittest.TestCase):
              "description": "Academic research welcomed. Industry experience desirable."},
         ]
         with patch.object(job_scorer, "distilled_profile", return_value="First-Class BSc Chemistry; zero industry experience"), \
-             patch.object(job_scorer, "generate", return_value='{"s":[99,85]}') as generate:
+             patch.object(job_scorer, "generate", return_value='{"s":[85]}') as generate:
             results = job_scorer.score_jobs_batch(jobs, persist=False)
-        self.assertEqual([r["score"] for r in results], [10, 85])
-        self.assertIn("Mandatory experience exceeds candidate: YES", generate.call_args.args[1])
+        self.assertEqual([r["score"] for r in results], [0, 85])
+        self.assertNotIn("Two years professional experience required", generate.call_args.args[1])
         system = generate.call_args.args[0]
         for text in ("suitability 25%", "relevance 25%", "fit 25%", "skills 15%", "fit 10%", "Do not invent", "London", "permanent graduate"):
             self.assertIn(text, system)
 
-    def test_score_cap_is_persisted(self):
+    def test_hard_rejection_is_persisted_without_model_call(self):
         listing = {"job_id": "test_1", "title": "Energy Analyst", "description": "Commercial experience required"}
         with patch.object(job_scorer, "distilled_profile", return_value="graduate"), \
-             patch.object(job_scorer, "generate", return_value='{"s":[95]}'), \
+             patch.object(job_scorer, "generate") as generate, \
              patch("jobs.job_store.save_job_score") as save:
             result = job_scorer.score_job(listing)
-        self.assertEqual(result["score"], 10)
-        self.assertEqual(save.call_args.args[1]["score"], 10)
+        self.assertEqual(result["score"], 0)
+        self.assertEqual(save.call_args.args[1]["score"], 0)
+        generate.assert_not_called()
 
     def test_other_hard_filters_and_missing_jd_limit_scores(self):
         listings = [
@@ -78,9 +79,9 @@ class ScoringAndCvTests(unittest.TestCase):
             {"title": "Graduate Energy Analyst", "location": "London"},
         ]
         with patch.object(job_scorer, "distilled_profile", return_value="graduate"), \
-             patch.object(job_scorer, "generate", return_value='{"s":[95,95,95,95,95]}'):
+             patch.object(job_scorer, "generate", return_value='{"s":[95]}'):
             results = job_scorer.score_jobs_batch(listings, persist=False)
-        self.assertEqual([result["score"] for result in results], [10, 10, 10, 10, 60])
+        self.assertEqual([result["score"] for result in results], [0, 0, 0, 0, 60])
 
     def test_invalid_batch_length_is_not_accepted(self):
         with self.assertRaises(ValueError):

@@ -1,4 +1,4 @@
-"""Reject explicit twelve-month employment contracts, not training or experience."""
+"""Reject explicit twelve-month contracts/placements, not training or experience."""
 
 import re
 
@@ -6,10 +6,11 @@ from config import REJECT_12_MONTH_CONTRACT
 from jobs.requirements_text import qualification_clauses
 
 _DURATION = r"(?:(?:12|twelve)[ -]+months?|(?:one|1)[ -]+year)"
-_CONTRACT = r"(?:fixed[ -]+term(?:\s+contract)?|ftc|temporary(?:\s+contract)?|contract)"
+_CONTRACT = (r"(?:fixed[ -]+term(?:\s+contract)?|ftc|temporary(?:\s+contract)?|contract|"
+             r"(?:(?:industrial|student|summer)\s+)?placements?)")
 _TWELVE_MONTH_CONTRACT = re.compile(
     rf"\b(?:{_DURATION}\s+(?:(?:full[ -]time|temporary|paid)\s+)?{_CONTRACT}|"
-    rf"{_CONTRACT}\s*(?:(?:for|of|lasting|duration(?:\s+of)?|length(?:\s+of)?|is)\s*)?"
+    rf"{_CONTRACT}\s*(?:(?:for|of|lasting|lasts?|will\s+last|duration(?:\s+of)?|length(?:\s+of)?|is)\s*)?"
     rf"[:(-]?\s*(?:a\s+)?{_DURATION})\b", re.I
 )
 

@@ -262,17 +262,15 @@ class ScoringEvidenceRegressionTests(unittest.TestCase):
                 job_scorer.score_jobs_batch([listing, job("Battery research.")], persist=False)
         generate.assert_not_called()
 
-    def test_late_hard_mismatches_are_capped_at_ten(self):
+    def test_late_hard_mismatches_are_rejected_before_model_call(self):
         requirements = ["Master's degree required", "PhD required", "Electrical Engineering degree required",
                         "Two years of professional experience required", "Applicants graduating in 2027"]
         listings = [job("Support clean energy research. " * 120 + "\nRequirements\n" + text) for text in requirements]
         with patch.object(job_scorer, "distilled_profile", return_value="BSc Chemistry; graduation year: 2026"), \
-             patch.object(job_scorer, "generate", return_value=json.dumps({"s": [99] * len(listings)})) as generate:
+             patch.object(job_scorer, "generate") as generate:
             results = job_scorer.score_jobs_batch(listings, persist=False)
-        self.assertEqual([result["score"] for result in results], [10] * len(listings))
-        for requirement in requirements:
-            self.assertIn(requirement, generate.call_args.args[1])
-        self.assertIn("Deterministic eligibility mismatch: maximum score 10", generate.call_args.args[1])
+        self.assertEqual([result["score"] for result in results], [0] * len(listings))
+        generate.assert_not_called()
 
     def test_eligible_regressions_are_not_capped(self):
         listings = [job(text) for text in ("No more than three years of work experience",

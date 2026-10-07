@@ -18,10 +18,12 @@ _SCIENCE_ALTERNATIVE = re.compile(
     r"(?<!computer )(?<!data )\bsciences?\b", re.I
 )
 _DEGREE_FACT = re.compile(
-    r"^(?:Required:\s*)?(?:(?:a|an|at\s+least|minimum(?:\s+of)?|you\s+(?:have|hold)|"
-    r"(?:have|hold|holding|possess)|(?:we\s+seek\s+)?candidates?\s+with)\s+)?"
-    r"(?:bachelor|b\.?sc|beng|master|m\.?sc|meng|ph\.?d|dphil|doctor|"
-    r"(?:a\s+)?degree\s+in|(?:a\s+)?(?:2[:.]1|2[:.]2|first[- ]class)\s+(?:degree\s+)?in)\b", re.I
+    r"^(?:Required:\s*)?(?:(?:along\s+with|at\s+least|minimum(?:\s+of)?|"
+    r"you\s+(?:(?:will|must|should)\s+)?(?:have|hold|possess)|"
+    r"have|hold|holding|possess|(?:we\s+seek\s+)?candidates?\s+"
+    r"(?:(?:(?:will|must|should)\s+)?(?:have|hold|possess)|with))\s+)?(?:an?\s+)?"
+    r"(?:bachelor['’]?s?|b\.?sc|beng|master['’]?s?|m\.?sc|meng|ph\.?d|dphil|doctor|"
+    r"degree\s+in|(?:2[:.]1|2[:.]2|first[- ]class)\s+(?:degree\s+)?in)\b", re.I
 )
 
 

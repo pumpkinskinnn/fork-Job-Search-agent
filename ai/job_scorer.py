@@ -9,7 +9,7 @@ from ai.resume_sections import split_resume_sections
 from ai.candidate_profile import PROFILE_CHAR_LIMIT, build_candidate_profile
 from ai.job_evidence import JOB_EVIDENCE_CHAR_LIMIT, EvidenceBudgetError, select_job_evidence
 from jobs.experience_filter import requires_professional_experience
-from jobs.profile_filter import profile_matches
+from jobs.profile_filter import pre_description_matches, profile_matches
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ SCORE_SYSTEM = (
     "Keep ambiguous experience wording for assessment. A 0-1 years range includes a fresh graduate. "
     "Score 0-10 for unmet mandatory professional experience, senior roles, mandatory Master's/PhD "
     "without a BSc alternative, incompatible required degree disciplines or graduation years, "
-    "or explicit 12-month fixed-term contracts. Keywords cannot compensate. "
+    "current-student-only placements, or explicit 12-month contracts/placements. Keywords cannot compensate. "
     "Prioritise London and reasonable London-hybrid roles, then explicitly UK-remote roles. "
     "Do not recommend international roles or assume remote means eligible from the UK. "
     "Missing descriptions/unknown eligibility are uncertainty: do not award a confident 70+ match "
@@ -138,11 +138,12 @@ def distilled_profile(resume: str | None = None) -> str:
     return build_candidate_profile(text, USER_PROFILE, _PROFILE_CHARS)
 
 
-def _listing_line(index: int, job: dict, jd_limit: int = _JD_CHARS) -> str:
+def _listing_line(index: int, job: dict, jd_limit: int = _JD_CHARS,
+                  *, description: str | None = None) -> str:
     title = _pipe_field(job.get("title") or "", 80)
     company = _pipe_field(job.get("company") or "", 40)
     location = _pipe_field(job.get("location") or "", 40)
-    snippet = _jd_snippet(fetch_job_description(job), jd_limit)
+    snippet = _jd_snippet(description if description is not None else fetch_job_description(job), jd_limit)
     barrier = "Mandatory experience exceeds candidate: YES. " if requires_professional_experience(job) else ""
     if not profile_matches(job):
         barrier += "Deterministic eligibility mismatch: maximum score 10. "
@@ -178,10 +179,28 @@ def _score_prompt(profile: str, lines: list[str]) -> str:
 
 
 def _score_jobs_once(jobs: list[dict], *, persist: bool) -> list[dict]:
+    # Discovery filters are also enforced for direct/cached-job scoring. Fill
+    # missing descriptions only for jobs without an already-known barrier.
+    results = [None] * len(jobs)
+    eligible = []
+    for position, job in enumerate(jobs):
+        description = None
+        if pre_description_matches(job) and not requires_professional_experience(job):
+            description = fetch_job_description(job)
+        if not profile_matches(job) or requires_professional_experience(job):
+            description = (job.get("description") or "").strip() or None
+            results[position] = (_persist_score(job, 0, description) if persist
+                                 else {"score": 0})
+        else:
+            eligible.append((position, job, description))
+    if not eligible:
+        return results
+
     profile = distilled_profile()
     # Prepare once, then pack complete listing evidence into bounded requests.
     # Never shrink eligibility sections to accommodate a larger batch.
-    prepared = [_listing_line(index, job) for index, job in enumerate(jobs, start=1)]
+    prepared = [_listing_line(index, job, description=description)
+                for index, (_, job, description) in enumerate(eligible, start=1)]
     batches = []
     batch = []
     for line in prepared:
@@ -197,8 +216,7 @@ def _score_jobs_once(jobs: list[dict], *, persist: bool) -> list[dict]:
     scores = []
     for lines in batches:
         scores.extend(_request_scores(_score_prompt(profile, lines), len(lines)))
-    results = []
-    for job, score in zip(jobs, scores):
+    for (position, job, _), score in zip(eligible, scores):
         # Check the full JD, not the token-limited snippet or model's judgement.
         if requires_professional_experience(job) or not profile_matches(job):
             score = min(score, 10)
@@ -206,7 +224,7 @@ def _score_jobs_once(jobs: list[dict], *, persist: bool) -> list[dict]:
             score = min(score, 60)
         description = (job.get("description") or "").strip() or None
         result = _persist_score(job, score, description) if persist else {"score": score}
-        results.append(result)
+        results[position] = result
     return results
 
 
