@@ -343,6 +343,12 @@ def meta():
             "reject_12_month_contract": REJECT_12_MONTH_CONTRACT,
             "filter_by_location": FILTER_BY_LOCATION,
             "education": USER_PROFILE.get("education"),
+            "highest_completed_education": USER_PROFILE.get("highest_completed_education"),
+            "current_education": USER_PROFILE.get("current_education"),
+            "current_education_status": USER_PROFILE.get("current_education_status"),
+            "current_education_description": USER_PROFILE.get("current_education_description"),
+            "graduation_year": USER_PROFILE.get("graduation_year"),
+            "available_from": USER_PROFILE.get("available_from"),
         },
         "fetch": {
             **_fetch_status,

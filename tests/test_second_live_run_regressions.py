@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 import unittest
+
+from tests.legacy_candidate import BscCandidateTestCase
 from unittest.mock import patch
 
 import config
@@ -26,8 +28,9 @@ STANTEC = ("At Stantec, we value your potential over past experience. "
            "and a keen interest in the energy transition, you will also be: an analytical thinker.")
 
 
-class SecondLiveEligibilityTests(unittest.TestCase):
+class SecondLiveEligibilityTests(BscCandidateTestCase):
     def setUp(self):
+        super().setUp()
         for module, name, value in (
             (education_filter, "FILTER_BY_EDUCATION", True),
             (education_filter, "MAX_EDUCATION", "bachelors"),
@@ -231,7 +234,7 @@ class SecondLiveEligibilityTests(unittest.TestCase):
         self.assertEqual(result["score"], 0)
 
 
-class EvidenceBudgetRegressionTests(unittest.TestCase):
+class EvidenceBudgetRegressionTests(BscCandidateTestCase):
     def test_saved_arup_jd_fits_unchanged_budget_with_core_evidence(self):
         description = ARUP_JD.read_text(encoding="utf-8")
         self.assertGreater(len(description), JOB_EVIDENCE_CHAR_LIMIT)

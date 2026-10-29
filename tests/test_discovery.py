@@ -1,6 +1,8 @@
 """Discovery coverage and budgets, using mocks only (no providers or live HTTP)."""
 
 import unittest
+
+from tests.legacy_candidate import BscCandidateTestCase
 from unittest.mock import Mock, patch
 
 import config
@@ -11,10 +13,14 @@ from jobs.profile_filter import profile_matches
 
 ROLES = config.DEFAULT_TARGET_ROLES.split(",")
 COMPANIES = ["Octopus Energy", "EDF", "National Grid", "Johnson Matthey", "Arup"]
-QUERIES = config.DEFAULT_BROAD_SEARCH_QUERIES.split(",")
+# Keep the original fourteen-query scenario stable as the live order evolves.
+QUERIES = ("graduate energy,energy analyst,renewable energy graduate,sustainability graduate,"
+           "materials graduate,materials scientist,battery scientist,electrochemistry,"
+           "graduate scientist,research scientist,clean energy graduate,net zero graduate,"
+           "graduate engineer,technical analyst").split(",")
 
 
-class TitleAndDomainTests(unittest.TestCase):
+class TitleAndDomainTests(BscCandidateTestCase):
     def test_requested_titles_survive_prefilter(self):
         for title in (
             "Clean Technology Graduate", "Net Zero Graduate Programme", "Graduate Development Programme",
@@ -57,8 +63,9 @@ class TitleAndDomainTests(unittest.TestCase):
             self.assertFalse(domain_filter.description_available(job))
 
 
-class LinkedInDiscoveryTests(unittest.TestCase):
+class LinkedInDiscoveryTests(BscCandidateTestCase):
     def setUp(self):
+        super().setUp()
         for name, value in (
             ("USER_PROFILE", {"target_roles": ROLES, "filter_by_role": True}),
             ("_company_offset", 0), ("_broad_offset", 0), ("_role_offset", 0),
@@ -180,8 +187,9 @@ class LinkedInDiscoveryTests(unittest.TestCase):
         self.assertEqual(config.FETCH_CONCURRENCY, 8)
 
 
-class ATSDiscoveryTests(unittest.TestCase):
+class ATSDiscoveryTests(BscCandidateTestCase):
     def setUp(self):
+        super().setUp()
         self.cached = patch('jobs.job_store.get_existing_job_descriptions', return_value={})
         self.cached.start()
         self.addCleanup(self.cached.stop)

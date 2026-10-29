@@ -1,5 +1,7 @@
 import copy
 import unittest
+
+from tests.legacy_candidate import BscCandidateTestCase
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -28,7 +30,7 @@ University Sustainability Project
 """
 
 
-class ScoringAndCvTests(unittest.TestCase):
+class ScoringAndCvTests(BscCandidateTestCase):
     def test_research_headings_preserve_research_and_education(self):
         for heading in ("PROJECT & RESEARCH EXPERIENCE", "RESEARCH EXPERIENCE", "Project and Research Experience:",
                         "RESEARCH & PROJECT EXPERIENCE", "PROJECT EXPERIENCE", "INTERNSHIP EXPERIENCE", "EXPERIENCE"):

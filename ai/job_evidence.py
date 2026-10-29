@@ -5,11 +5,12 @@ from dataclasses import dataclass
 
 from jobs.requirements_text import (
     NEUTRAL_HEADINGS, PREFERRED_HEADINGS, REQUIRED_HEADINGS, REQUIRED,
-    complete_sentences, is_optional, plain_blocks,
+    complete_sentences, is_optional,
 )
 from jobs.student_filter import requires_current_student
 from jobs.education_filter import _required_degree
 from jobs.experience_filter import _extract_year_requirements
+from jobs.availability_filter import has_start_evidence, normalise_start_lines
 
 JOB_EVIDENCE_CHAR_LIMIT = 2400
 
@@ -32,7 +33,7 @@ _HEADINGS = {
 }
 _DEGREE = re.compile(
     r"\b(?:degree|qualifications?|bachelor['’]?s?|b\.?\s*(?:sc|s|eng)|master['’]?s?|"
-    r"m\.?\s*(?:sc|s|eng)|mres|ph\.?\s*d|dphil|doctorate|postgraduate|STEM|discipline)\b", re.I
+    r"m(?!\.?\s*s\.?\s*office\b)\.?\s*(?:sc|s|eng)|mres|ph\.?\s*d|dphil|doctorate|postgraduate|STEM|discipline)\b", re.I
 )
 _EXPERIENCE = re.compile(r"\bexperience\b|\b\d+[+-]?\s*years?\b", re.I)
 _ELIGIBILITY = re.compile(
@@ -68,7 +69,7 @@ def _facts(description: str) -> list[_Fact]:
     facts = []
     seen = set()
     context = ""
-    for line in plain_blocks(description).splitlines():
+    for line in normalise_start_lines(description).splitlines():
         line = re.sub(r"\s+", " ", line).strip(" \t•-")
         if not line:
             continue
@@ -94,12 +95,13 @@ def _facts(description: str) -> list[_Fact]:
                 context in {"required", "eligibility"} or REQUIRED.search(sentence)
                 or _EXPERIENCE_SCOPE.search(sentence)
                 or _extract_year_requirements(sentence)[0] is not None))
-            eligibility = bool(_ELIGIBILITY.search(sentence))
+            start_evidence = has_start_evidence(sentence)
+            eligibility = bool(_ELIGIBILITY.search(sentence) or start_evidence)
             contract = bool(_CONTRACT.search(sentence))
             # Benefits and EEO text can contain "degree", "experience",
             # "nationality" and "permanent" without imposing eligibility.
             # Preserve explicit requirements even under a misplaced heading.
-            explicit = bool(student or (degree and _required_degree(sentence))
+            explicit = bool(student or start_evidence or (degree and _required_degree(sentence))
                             or ((experience or eligibility or contract) and REQUIRED.search(sentence)))
             if (context == "boilerplate" or _BOILERPLATE.search(sentence)) and not explicit:
                 continue

@@ -1,22 +1,25 @@
 # UK Graduate Energy & Materials Job Agent
 
-A local job-search agent for a **recent BSc Chemistry graduate with First-Class Honours**, based in **London, United Kingdom**, with academic research/projects/internships and **no full-time professional industry experience**. It searches LinkedIn and supported company career sites for graduate energy, renewables, sustainability, battery/electrochemistry, materials and R&D roles. Jobs are stored in SQLite, scored against your CV, shown in a React dashboard and optionally emailed when they score **70+** and were posted today or within the previous two calendar days.
+A local job-search agent for a **current Imperial College London MSc Advanced Materials Science and Engineering student (2026-2027)** with a **completed First-Class Honours BSc Chemistry from Warwick**, based in **London, United Kingdom**. The MSc is in progress, expected in 2027; full-time availability begins **1 October 2027**. Academic research/projects/internships do not count as professional industry employment. It searches LinkedIn and supported company career sites for graduate energy, renewables, sustainability, battery/electrochemistry, materials and R&D roles. Jobs are stored in SQLite, scored against your CV, shown in a React dashboard and optionally emailed when they score **70+** and were posted today or within the previous two calendar days.
 
 The workflow is **search → filter → score → display/email**. It does not submit applications. LinkedIn's existing request budgets and 15-minute default polling interval are unchanged.
 
 ### Graduate filtering and scoring
 
 - Keep graduate/new-graduate, junior, entry-level, trainee and internship roles; scoring favours permanent graduate jobs over internships.
-- Reject placements requiring current university enrolment, a placement/sandwich year, or return to university. Keep graduate-open internships, student-or-graduate alternatives, and enrolment preferences.
+- Reject degree placement/sandwich years and return-to-university requirements even while the candidate is an MSc student. Current postgraduate/graduate-open internships can qualify; undergraduate-only or penultimate-year roles still do not.
 - Reject senior/lead/principal/staff/manager/director/head/VP/chief titles. Ordinary Research Engineer titles are accepted.
 - Reject explicit mandatory industry/professional/commercial/consultancy experience, including positive minimum years. Keep preferences, zero-minimum ranges, upper bounds such as "up to two years", and academic/research/internship alternatives. Graduate/training programme duration is not prior experience. Ambiguous experience is retained for scoring.
-- With `MAX_EDUCATION=bachelors`, reject mandatory Master's/PhD qualifications (including natural wording such as "Along with a master's degree" or "You will have a master's degree") and incompatible required engineering degree disciplines; keep postgraduate preferences, explicit BSc alternatives, and Chemistry/materials/science/STEM/related-discipline alternatives.
-- `CANDIDATE_GRADUATION_YEAR=2026` rejects explicit incompatible applicant graduation cohorts. A programme start year does not specify the applicant's graduation year.
+- `HIGHEST_COMPLETED_EDUCATION=bachelors` describes awarded qualifications. `CURRENT_EDUCATION=masters` and `CURRENT_EDUCATION_STATUS=in_progress` describe current study. A relevant Master's required by an October 2027 or later start is eligible; a Master's explicitly already required at application or an incompatible discipline is rejected. With no stated start, keep the role and flag completion timing for confirmation. Master's preferences and bachelor's alternatives remain open; an ongoing MSc never satisfies a PhD requirement.
+- `CANDIDATE_GRADUATION_YEAR=2027` accepts 2027 and overlapping cohorts, rejecting exclusive 2026/2028 cohorts. A programme start year does not specify the applicant's graduation year.
+- `CANDIDATE_AVAILABLE_FROM=2027-10-01` rejects explicit fixed starts before October 2027. A missing start date stays eligible; a seasonal or flexible date overlapping availability (such as Autumn 2027) produces `eligibility_warnings` for confirmation in job records and scoring context. Start, graduation and application/posting dates are assessed separately.
 - With `REJECT_12_MONTH_CONTRACT=true`, reject explicit 12-month/one-year contracts, fixed-term contracts, FTCs, temporary terms and placements. Unrelated training durations are accepted.
 - With `FILTER_BY_LOCATION=true`, keep UK locations and explicitly UK-eligible remote roles. London/hybrid is prioritised by scoring; other UK roles score lower for practical fit. Known overseas locations and unspecified remote eligibility are rejected. Missing location/description is uncertain, not proof of eligibility.
 - Score with weights: graduate suitability 25%, energy/sustainability 25%, academic/technical fit 25%, transferable/analytical skills 15%, location/practical fit 10%. Deterministic hard-filter mismatches are rejected before AI scoring, including direct/cached-job scoring (score 0); missing descriptions are capped at 60/100, below the default email threshold.
 - Lever descriptions include every structured list, requirement and additional text block. Scoring selects complete facts from the whole JD, prioritising eligibility, qualifications, experience and contract type before duties/preferences. Excerpts are bounded to 2,400 characters per job; requests (including the system prompt) are bounded to 48,000 characters and split into smaller batches when necessary. If critical facts alone exceed the excerpt budget, scoring fails before the API request instead of omitting eligibility evidence.
 - CV research/project/internship headings are recognised without renaming. Tailoring preserves evidenced skills and never increases years of experience to satisfy a job description. ATS targets are diagnostics, not guarantees.
+- Scoring profiles reserve at least 300 characters within the unchanged 4,800-character ceiling. Leadership is reduced to role/institution identity and languages to names; full detail remains in the local CV. Academic eligibility, relevant modules, technical skills and all three research entries take priority.
+- Broad searches still rotate four queries per cycle. The first two groups prioritise 2027 energy and materials searches; the remaining queries continue afterwards within the same LinkedIn limits.
 
 Filters operate on available listing text and cannot infer missing requirements. Workday and SmartRecruiters list responses may omit descriptions; such listings need a full JD before reliable scoring and are not allowed to reach the default email threshold without one. Career-page discovery only supports known ATS platforms; some employers will be found through LinkedIn instead.
 
@@ -123,7 +126,11 @@ JOB_LOCATION=London, United Kingdom
 EXPERIENCE_YEARS=0
 EXPERIENCE_MIN=0
 EXPERIENCE_MAX=0
-MAX_EDUCATION=bachelors
+HIGHEST_COMPLETED_EDUCATION=bachelors
+CURRENT_EDUCATION=masters
+CURRENT_EDUCATION_STATUS=in_progress
+CANDIDATE_GRADUATION_YEAR=2027
+CANDIDATE_AVAILABLE_FROM=2027-10-01
 REJECT_12_MONTH_CONTRACT=true
 ```
 
@@ -307,8 +314,12 @@ All settings are loaded from `.env` and `config/companies.json` by `config.py`. 
 | `EXPERIENCE_MIN` | `0` | Displayed profile minimum; no lower-bound rejection of graduate jobs |
 | `EXPERIENCE_MAX` | `0` | Reject unmet mandatory professional requirements above this ceiling |
 | `FILTER_BY_EXPERIENCE` | `true` | Enable/disable seniority and mandatory experience filtering |
-| `MAX_EDUCATION` | `bachelors` | Degree ceiling: bachelors, masters or phd; only mandatory higher qualifications are rejected |
-| `CANDIDATE_GRADUATION_YEAR` | `2026` | Candidate's graduation cohort; explicit incompatible graduation years are rejected, programme start dates are allowed |
+| `HIGHEST_COMPLETED_EDUCATION` | `bachelors` | Awarded education level; legacy `MAX_EDUCATION` is only a fallback when this is unset |
+| `CURRENT_EDUCATION` | `masters` | Current study level; does not change the highest completed qualification |
+| `CURRENT_EDUCATION_STATUS` | `in_progress` | Current study status; application-time completed-Master's requirements remain unmet |
+| `CURRENT_EDUCATION_DISCIPLINE` | `Advanced Materials Science and Engineering` | Discipline used to assess relevant Master's requirements |
+| `CANDIDATE_GRADUATION_YEAR` | `2027` | Expected graduation cohort; programme start years are assessed separately |
+| `CANDIDATE_AVAILABLE_FROM` | `2027-10-01` | Earliest full-time start (ISO date); missing dates are kept, overlapping seasonal/flexible dates need confirmation |
 | `FILTER_BY_EDUCATION` | `true` | Enable/disable education filtering |
 | `REJECT_12_MONTH_CONTRACT` | `true` | Reject explicit 12-month/one-year contracts independently of other filters |
 
@@ -320,7 +331,7 @@ All settings are loaded from `.env` and `config/companies.json` by `config.py`. 
 | `FETCH_CONCURRENCY` | `8` | Parallel threads for **career-site** fetches (LinkedIn is always sequential) |
 | `WORKDAY_SEARCH_TERMS` | `graduate,energy,sustainability,materials,scientist,analyst,engineer` | One rotating term per board per cycle; empty fetches all roles within the existing 400-result cap. Explicit legacy `WORKDAY_SEARCH_TEXT` overrides other than `graduate` remain supported when this setting is absent |
 | `ENABLE_BROAD_LINKEDIN_SEARCH` | `true` | Add company-independent role/domain searches alongside the shortlist |
-| `BROAD_SEARCH_QUERIES` | 14 graduate/energy/materials queries in `env.template` | Comma-separated broad search phrases, using `JOB_LOCATION` |
+| `BROAD_SEARCH_QUERIES` | 21 graduate/energy/materials queries in `env.template` | Existing 14 searches plus seven 2027 graduate searches, using `JOB_LOCATION` |
 | `BROAD_SEARCH_QUERIES_PER_CYCLE` | `4` | Rotating broad queries per cycle, sharing the existing total search cap with company queries |
 | `ATS_DETAIL_REQUESTS_PER_BOARD` | `10` | Maximum official SmartRecruiters/Workday detail attempts per board fetch; reuse cached descriptions and rotate pending attempts. `0` disables detail requests |
 | `LINKEDIN_MIN_DELAY_SECONDS` | `6` | Minimum pause between LinkedIn requests (~10/min) |

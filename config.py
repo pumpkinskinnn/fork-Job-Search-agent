@@ -80,9 +80,19 @@ EXPERIENCE_YEARS = int(os.getenv("EXPERIENCE_YEARS", "0"))
 FILTER_BY_EXPERIENCE = _parse_bool(os.getenv("FILTER_BY_EXPERIENCE", "true"))
 EXPERIENCE_MIN = int(os.getenv("EXPERIENCE_MIN", "0"))
 EXPERIENCE_MAX = int(os.getenv("EXPERIENCE_MAX", str(EXPERIENCE_YEARS)))
-MAX_EDUCATION = os.getenv("MAX_EDUCATION", "bachelors").strip().lower() or "bachelors"
+HIGHEST_COMPLETED_EDUCATION = os.getenv(
+    "HIGHEST_COMPLETED_EDUCATION", os.getenv("MAX_EDUCATION", "bachelors")
+).strip().lower() or "bachelors"
+# Compatibility alias: this describes completed education, never an ongoing degree.
+MAX_EDUCATION = HIGHEST_COMPLETED_EDUCATION
+CURRENT_EDUCATION = os.getenv("CURRENT_EDUCATION", "masters").strip().lower()
+CURRENT_EDUCATION_STATUS = os.getenv("CURRENT_EDUCATION_STATUS", "in_progress").strip().lower()
+CURRENT_EDUCATION_DISCIPLINE = os.getenv(
+    "CURRENT_EDUCATION_DISCIPLINE", "Advanced Materials Science and Engineering"
+).strip()
 FILTER_BY_EDUCATION = _parse_bool(os.getenv("FILTER_BY_EDUCATION", "true"))
-CANDIDATE_GRADUATION_YEAR = _parse_int(os.getenv("CANDIDATE_GRADUATION_YEAR", "2026"), 2026)
+CANDIDATE_GRADUATION_YEAR = _parse_int(os.getenv("CANDIDATE_GRADUATION_YEAR", "2027"), 2027)
+CANDIDATE_AVAILABLE_FROM = os.getenv("CANDIDATE_AVAILABLE_FROM", "2027-10-01").strip()
 REJECT_12_MONTH_CONTRACT = _parse_bool(os.getenv("REJECT_12_MONTH_CONTRACT", "true"))
 FILTER_BY_LOCATION = _parse_bool(os.getenv("FILTER_BY_LOCATION", "true"))
 WORKDAY_SEARCH_TEXT = os.getenv("WORKDAY_SEARCH_TEXT", "graduate").strip()
@@ -94,10 +104,12 @@ WORKDAY_SEARCH_TERMS = _parse_csv(os.getenv(
 )) or [""]
 ENABLE_BROAD_LINKEDIN_SEARCH = _parse_bool(os.getenv("ENABLE_BROAD_LINKEDIN_SEARCH", "true"))
 DEFAULT_BROAD_SEARCH_QUERIES = (
-    "graduate energy,energy analyst,renewable energy graduate,sustainability graduate,"
-    "materials graduate,materials scientist,battery scientist,electrochemistry,"
+    "graduate energy,2027 graduate energy,energy graduate scheme 2027,energy analyst,"
+    "materials graduate,materials graduate 2027,graduate materials scientist 2027,electrochemistry,"
+    "renewable energy graduate,sustainability graduate,materials scientist,battery scientist,"
     "graduate scientist,research scientist,clean energy graduate,net zero graduate,"
-    "graduate engineer,technical analyst"
+    "graduate engineer,technical analyst,2027 sustainability graduate,"
+    "energy transition graduate 2027,graduate consultant energy 2027"
 )
 BROAD_SEARCH_QUERIES = list(dict.fromkeys(_parse_csv(os.getenv(
     "BROAD_SEARCH_QUERIES", DEFAULT_BROAD_SEARCH_QUERIES,
@@ -113,10 +125,15 @@ USER_PROFILE = {
     ),
     "target_companies": _load_target_companies(),
     "location": os.getenv("JOB_LOCATION", "London, United Kingdom").strip(),
-    "education": "Recent BSc Chemistry graduate; First-Class Honours",
+    "education": "Completed BSc Chemistry, First-Class Honours, University of Warwick",
+    "highest_completed_education": HIGHEST_COMPLETED_EDUCATION,
+    "current_education": CURRENT_EDUCATION,
+    "current_education_status": CURRENT_EDUCATION_STATUS,
+    "current_education_description": f"MSc {CURRENT_EDUCATION_DISCIPLINE}, Imperial College London (2026-2027)",
     "background": "University research projects/internships; no full-time professional industry experience",
     "experience_years": EXPERIENCE_YEARS,
     "graduation_year": CANDIDATE_GRADUATION_YEAR,
+    "available_from": CANDIDATE_AVAILABLE_FROM,
     "min_match_score": int(os.getenv("MIN_MATCH_SCORE", "65")),
     "skills": _parse_csv(os.getenv("USER_SKILLS", "")),
     "job_lookback": os.getenv("JOB_LOOKBACK", "r604800").strip(),

@@ -8,7 +8,7 @@ from jobs.requirements_text import is_optional, qualification_clauses
 _YEARS = r"20\d{2}(?:\s*(?:,|/|or|and|to|-)\s*20\d{2})*"
 _COHORT = re.compile(
     rf"\b(?:(?:graduating|graduated)\s+(?:in\s+)?|graduate\s+in\s+)(?P<after>{_YEARS})\b|"
-    rf"\b(?P<before>{_YEARS})\s+graduates\b|"
+    rf"\b(?P<before>{_YEARS})\s+(?:graduates\b|graduate\b(?!\s+(?:programme|program|scheme)\b))|"
     rf"\b(?:graduation\s+(?:year|date)|class\s+of)\s*[:=]?\s*(?P<label>{_YEARS})\b", re.I
 )
 

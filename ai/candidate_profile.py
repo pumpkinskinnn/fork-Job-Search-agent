@@ -6,6 +6,7 @@ import re
 from ai.resume_sections import parse_experience_entries, split_resume_sections
 
 PROFILE_CHAR_LIMIT = 4800
+PROFILE_HEADROOM_CHARS = 300
 
 _MODULE_TOPICS = re.compile(
     r"energy|electrochem|materials|data science|sustainability|project management", re.I
@@ -71,7 +72,10 @@ def build_candidate_profile(resume: str, candidate: dict, limit: int = PROFILE_C
     budget. No project identity or role scope is silently cut. If mandatory
     identity/scope/qualification data cannot fit, fail clearly instead of sending
     a misleading partial profile. Selection is extractive, not generated prose.
+    Reserve 300 characters within the standard ceiling; smaller caller budgets
+    still apply. Compact leadership/languages before selecting optional facts.
     """
+    limit = min(limit, PROFILE_CHAR_LIMIT - PROFILE_HEADROOM_CHARS)
     sections = split_resume_sections(resume)
     blocks = []
     optional = []
@@ -104,27 +108,46 @@ def build_candidate_profile(resume: str, candidate: dict, limit: int = PROFILE_C
     )
     if candidate.get("graduation_year"):
         background += f"; candidate graduation year: {candidate['graduation_year']}"
+    if candidate.get("available_from"):
+        background += f"; full-time employment available from {candidate['available_from']}"
     add("Practical/background", [background], inline=True, mandatory=(0,))
+    if candidate.get("highest_completed_education"):
+        state = f"Highest completed education: {candidate['highest_completed_education']}"
+        if candidate.get("current_education"):
+            state += (f"; current education: {candidate['current_education']} "
+                      f"({candidate.get('current_education_status', 'status unspecified')}); "
+                      "ongoing degree not yet awarded")
+        add("Education state", [state], inline=True, mandatory=(0,))
     if areas:
         add("Target areas", areas, inline=True, mandatory=range(len(areas)))
     roles = candidate.get("target_roles") or []
     if roles:
         add("Target roles", roles, inline=True, mandatory=range(len(roles)))
 
-    education, modules = [], []
-    in_modules = False
+    education, module_groups = [], []
+    current_modules = None
+    institution = ""
     for raw in sections.get("EDUCATION", []):
         text = _clean(raw)
         if re.match(r"^(?:Relevant )?modules\s*:", text, re.I):
-            in_modules = True
+            current_modules = []
+            module_groups.append(("Modules" + (f" / {institution}" if institution else ""), current_modules))
             text = text.split(":", 1)[1].strip()
-        if text:
-            (modules if in_modules else education).append(text)
+            if text:
+                current_modules.append(text)
+        elif text:
+            if current_modules is not None and raw.strip().startswith(("-", "•", "*")):
+                current_modules.append(text)
+            else:
+                current_modules = None
+                education.append(text)
+                if re.search(r"\b(?:university|college)\b", text, re.I):
+                    institution = text
     if education:
         add("Education", education, inline=True, mandatory=range(len(education)))
-    if modules:
+    for label, modules in module_groups:
         core = [i for i, text in enumerate(modules) if _MODULE_TOPICS.search(text)]
-        block = add("Modules", modules, inline=True, mandatory=core)
+        block = add(label, modules, inline=True, mandatory=core)
         optional.extend((40, block, i) for i in range(len(modules)) if i not in core)
 
     for name, items in _skills(sections.get("SKILLS", [])):
@@ -137,7 +160,7 @@ def build_candidate_profile(resume: str, candidate: dict, limit: int = PROFILE_C
     entries = parse_experience_entries(sections.get("EXPERIENCE", []))
     entries += parse_experience_entries(sections.get("PROJECTS", []))
     if entries:
-        add("Research/project/internship evidence (retain the stated academic/work context)", [], required=True)
+        add("Research/projects (academic; not professional employment)", [], required=True)
     for entry in entries:
         identity = " | ".join(filter(None, (entry["header"], entry["subheader"])))
         # Normalise scientific notation, without rewriting or inventing facts.
@@ -149,13 +172,14 @@ def build_candidate_profile(resume: str, candidate: dict, limit: int = PROFILE_C
             if score:
                 optional.append((100 + score, block, i))
 
-    # Leadership and languages remain useful transferable evidence, but never
-    # enter the research/professional experience list.
+    # Keep compact, source-derived identities/names. Detailed leadership bullets
+    # and language proficiency levels remain in the CV, outside the score prompt.
     for entry in parse_experience_entries(sections.get("LEADERSHIP", [])):
         identity = " | ".join(filter(None, (entry["header"], entry["subheader"])))
-        block = add(f"Leadership/activities (separate): {identity}", entry["bullets"])
-        optional.extend((20, block, i) for i in range(len(block.items)))
-    languages = [_clean(line) for line in sections.get("LANGUAGES", []) if _clean(line)]
+        block = add("Leadership (separate)", [identity], inline=True)
+        optional.append((20, block, 0))
+    languages = [re.split(r"\s+[-–—|:]\s+", _clean(line), maxsplit=1)[0]
+                 for line in sections.get("LANGUAGES", []) if _clean(line)]
     if languages:
         block = add("Languages (separate)", languages, inline=True)
         optional.extend((10, block, i) for i in range(len(languages)))

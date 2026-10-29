@@ -3,6 +3,8 @@
 import json
 import re
 import unittest
+
+from tests.legacy_candidate import BscCandidateTestCase
 from unittest.mock import Mock, patch
 
 from ai import job_scorer
@@ -37,8 +39,9 @@ def lever_payload(**fields):
     }
 
 
-class EligibilityRegressionTests(unittest.TestCase):
+class EligibilityRegressionTests(BscCandidateTestCase):
     def setUp(self):
+        super().setUp()
         for module, name, value in (
             (experience_filter, "FILTER_BY_EXPERIENCE", True),
             (experience_filter, "EXPERIENCE_MAX", 0),
@@ -187,7 +190,7 @@ class EligibilityRegressionTests(unittest.TestCase):
         self.assertTrue(profile_matches(job("Preferred qualifications: Master's degree in Chemistry")))
 
 
-class LeverDescriptionRegressionTests(unittest.TestCase):
+class LeverDescriptionRegressionTests(BscCandidateTestCase):
     def test_official_description_and_all_list_sections_retained(self):
         description = normalize_lever_description(lever_payload())
         for text in ("Research battery materials", "Responsibilities\nAnalyse electrochemical",
@@ -224,7 +227,7 @@ class LeverDescriptionRegressionTests(unittest.TestCase):
                 self.assertFalse(profile_matches(listings[0]))
 
 
-class ScoringEvidenceRegressionTests(unittest.TestCase):
+class ScoringEvidenceRegressionTests(BscCandidateTestCase):
     def test_late_eligibility_has_priority_over_long_introduction(self):
         description = "We research clean energy for customers. " * 150 + "\n" + normalize_lever_description(lever_payload())
         excerpt = select_job_evidence(description)

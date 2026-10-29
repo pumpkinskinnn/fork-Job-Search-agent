@@ -2,6 +2,7 @@
 
 import re
 
+from config import CURRENT_EDUCATION, CURRENT_EDUCATION_STATUS
 from jobs.requirements_text import REQUIRED, is_optional, qualification_clauses
 
 _ENROLMENT = re.compile(
@@ -22,6 +23,16 @@ _GRADUATE_ALTERNATIVE = re.compile(
     r"(?:open|available)\s+to\s+(?:(?:recent|new)\s+)?graduates?|"
     r"graduates?\s+(?:are\s+)?(?:welcome|eligible|accepted))\b", re.I
 )
+_DEGREE_PLACEMENT = re.compile(
+    r"\b(?:placement[ -]year|sandwich[ -]year|year\s+in\s+industry|"
+    r"(?:one|1)[ -]year\s+placement\b.{0,60}\b(?:part\s+of|during)\b.{0,30}\bdegree)\b", re.I
+)
+_RETURN_TO_STUDY = re.compile(
+    r"\b(?:return|returning)\s+to\s+(?:university|college)\b.{0,50}\b(?:placement|afterwards|afterward)\b", re.I
+)
+_UNDERGRADUATE_ONLY = re.compile(r"\b(?:penultimate[ -]year|undergraduate\s+students?|bachelor['’]?s?\s+students?)\b", re.I)
+_POSTGRADUATE = re.compile(r"\b(?:postgraduate|master['’]?s?|MSc)\b.{0,40}\b(?:students?|studying|enrolled)\b|"
+                          r"\b(?:studying|enrolled)\b.{0,40}\b(?:postgraduate|master['’]?s?|MSc)\b", re.I)
 
 
 def requires_current_student(clause: str) -> bool:
@@ -36,8 +47,13 @@ def student_matches(job: dict) -> bool:
     graduates_welcome = any(not is_optional(clause) and _GRADUATE_ALTERNATIVE.search(clause)
                             for clause in clauses)
     for clause in clauses:
+        if not is_optional(clause) and (_DEGREE_PLACEMENT.search(clause) or _RETURN_TO_STUDY.search(clause)):
+            return False
         if not requires_current_student(clause):
             continue
+        if CURRENT_EDUCATION == "masters" and CURRENT_EDUCATION_STATUS == "in_progress":
+            if not _UNDERGRADUATE_ONLY.search(clause) and (not _PLACEMENT.search(clause) or _POSTGRADUATE.search(text)):
+                continue
         # A placement title alone does not override an explicit invitation to
         # graduates. An independent enrolment requirement still does.
         if graduates_welcome and not _ENROLMENT.search(clause) and not REQUIRED.search(clause):

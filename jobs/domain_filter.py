@@ -10,7 +10,7 @@ DOMAIN = re.compile(
     r"electrochem\w*|chemistry|chemist|chemical|cleantech|clean[ -](?:technology|tech)|"
     r"net[ -]zero|low[ -]carbon|decarbon\w*|climate|photocatal\w*|"
     r"solar|photovoltaic\w*|hydrogen|semiconductor\w*|functional materials|"
-    r"environmental|polymer\w*)\b", re.I
+    r"environmental|polymer\w*|nano(?:materials?|science|technology)|optoelectronic\w*)\b", re.I
 )
 IRRELEVANT_TITLE = re.compile(
     r"\b(?:software|developer|full[ -]stack|marketing|sales|HR|human resources|"

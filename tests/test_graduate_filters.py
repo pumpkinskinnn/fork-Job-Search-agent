@@ -1,4 +1,6 @@
 import unittest
+
+from tests.legacy_candidate import BscCandidateTestCase
 from unittest.mock import patch
 
 from config import DEFAULT_TARGET_ROLES
@@ -11,8 +13,9 @@ def job(title="Energy Analyst", description="", location="London, United Kingdom
     return {"title": title, "description": description, "location": location}
 
 
-class GraduateFiltersTests(unittest.TestCase):
+class GraduateFiltersTests(BscCandidateTestCase):
     def setUp(self):
+        super().setUp()
         for module, name, value in (
             (experience_filter, "FILTER_BY_EXPERIENCE", True),
             (experience_filter, "EXPERIENCE_MAX", 0),

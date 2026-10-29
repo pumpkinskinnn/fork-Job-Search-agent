@@ -1,4 +1,6 @@
 import unittest
+
+from tests.legacy_candidate import BscCandidateTestCase
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
@@ -7,8 +9,9 @@ from jobs import contract_filter, database, education_filter, experience_filter,
 from jobs.ats import smartrecruiters, workday
 
 
-class PipelineTests(unittest.TestCase):
+class PipelineTests(BscCandidateTestCase):
     def setUp(self):
+        super().setUp()
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         for module, name, value in (
